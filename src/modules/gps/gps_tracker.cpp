@@ -14,6 +14,11 @@
 
 #define MAX_WAIT 5000
 
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+extern void heltecV4PrepareGpsForExclusiveUse();
+extern void heltecV4ReleaseGpsExclusiveUse();
+#endif
+
 GPSTracker::GPSTracker() { setup(); }
 
 GPSTracker::~GPSTracker() {
@@ -23,9 +28,15 @@ GPSTracker::~GPSTracker() {
 #ifdef USE_BOOST
     PPM.disableOTG();
 #endif
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4ReleaseGpsExclusiveUse();
+#endif
 }
 
 void GPSTracker::setup() {
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4PrepareGpsForExclusiveUse();
+#endif
     ioExpander.turnPinOnOff(IO_EXP_GPS, HIGH);
 #ifdef USE_BOOST /// ENABLE 5V OUTPUT
     PPM.enableOTG();

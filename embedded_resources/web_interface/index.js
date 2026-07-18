@@ -146,7 +146,12 @@ async function requestGet(url, data) {
         handleAuthError();
         reject(new Error(`Unauthorized access (401)`));
       } else {
-        reject(new Error(`Request failed with status ${req.status}`));
+        let message = `Request failed with status ${req.status}`;
+        try {
+          const response = JSON.parse(req.responseText);
+          if (response.error) message = response.error;
+        } catch (_) {}
+        reject(new Error(message));
       }
     };
     req.onerror = () => {
@@ -174,7 +179,12 @@ async function requestPost(url, data) {
         handleAuthError();
         reject(new Error(`Unauthorized access (401)`));
       } else {
-        reject(new Error(`Request failed with status ${req.status}`));
+        let message = `Request failed with status ${req.status}`;
+        try {
+          const response = JSON.parse(req.responseText);
+          if (response.error) message = response.error;
+        } catch (_) {}
+        reject(new Error(message));
       }
     };
     req.onerror = () => reject(new Error("Network error"));
@@ -289,6 +299,494 @@ async function runCommand(cmd) {
     Dialog.loading.hide();
   }
 }
+
+let heltecGpsActive = false;
+let heltecLoraActive = false;
+let heltecLoraStatus = {};
+let heltecStatusTimer = null;
+
+function setHeltecText(id, value) {
+  const element = $(id);
+  if (element) element.textContent = value;
+}
+
+function formatHeltecNumber(value, digits = 1) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "--";
+}
+
+function formatHeltecAge(milliseconds) {
+  const seconds = Math.max(0, Math.floor((Number(milliseconds) || 0) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+}
+
+function formatHeltecDuration(milliseconds) {
+  let seconds = Math.max(0, Math.floor((Number(milliseconds) || 0) / 1000));
+  const days = Math.floor(seconds / 86400);
+  seconds %= 86400;
+  const hours = Math.floor(seconds / 3600);
+  seconds %= 3600;
+  const minutes = Math.floor(seconds / 60);
+  seconds %= 60;
+  if (days) return `${days}d ${hours}h ${minutes}m`;
+  if (hours) return `${hours}h ${minutes}m`;
+  if (minutes) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function formatHeltecBytes(bytes) {
+  let value = Math.max(0, Number(bytes) || 0);
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function downloadHeltecFile(contents, mimeType, prefix, extension) {
+  const blob = new Blob([contents], { type: mimeType });
+  const link = document.createElement("a");
+  const objectUrl = URL.createObjectURL(blob);
+  link.href = objectUrl;
+  link.download = `${prefix}-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
+function heltecGpsTrackToGpx(track) {
+  const points = Array.isArray(track.points) ? track.points : [];
+  const trackPoints = points
+    .filter(
+      (point) =>
+        Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude)),
+    )
+    .map((point) => {
+      const details = [];
+      if (point.altitudeMeters !== undefined) {
+        details.push(`<ele>${Number(point.altitudeMeters).toFixed(2)}</ele>`);
+      }
+      if (point.satellites) details.push(`<sat>${Number(point.satellites)}</sat>`);
+      if (point.hdop !== undefined) details.push(`<hdop>${Number(point.hdop).toFixed(2)}</hdop>`);
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{2}Z$/.test(point.utc || "")) {
+        details.push(`<time>${point.utc}</time>`);
+      }
+      const speed =
+        point.speedKmph !== undefined ? `; speed ${Number(point.speedKmph).toFixed(2)} km/h` : "";
+      details.push(`<desc>Captured ${Number(point.capturedAtMs) || 0} ms after boot${speed}</desc>`);
+      return `      <trkpt lat="${Number(point.latitude).toFixed(7)}" lon="${Number(point.longitude).toFixed(7)}">${details.join("")}</trkpt>`;
+    })
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Bruce Heltec V4" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Bruce Heltec V4 GPS track</name>
+    <trkseg>
+${trackPoints}
+    </trkseg>
+  </trk>
+</gpx>
+`;
+}
+
+function renderHeltecBoardStatus(status) {
+  setHeltecText("#heltec-board-name", status.board || "Heltec WiFi LoRa 32 V4");
+  const firmware = status.firmware || {};
+  const firmwareLabel = firmware.commit
+    ? `${firmware.version || "unknown"} (${firmware.commit})`
+    : firmware.version || "unknown";
+  setHeltecText("#heltec-firmware", firmwareLabel);
+
+  const system = status.system || {};
+  const heap = system.heap || {};
+  const psram = system.psram || {};
+  setHeltecText("#heltec-uptime", formatHeltecDuration(system.uptimeMs));
+  setHeltecText(
+    "#heltec-heap",
+    `${formatHeltecBytes(heap.freeBytes)} free / ${formatHeltecBytes(heap.totalBytes)}`,
+  );
+  setHeltecText(
+    "#heltec-psram",
+    psram.present
+      ? `${formatHeltecBytes(psram.freeBytes)} free / ${formatHeltecBytes(psram.totalBytes)}`
+      : "not detected",
+  );
+
+  const network = status.network || {};
+  const clientCount = Number(network.connectedClients) || 0;
+  setHeltecText(
+    "#heltec-network",
+    network.apActive
+      ? `${network.ssid || "AP"} | ${network.ip || "--"} | ch ${network.channel || "--"} | ${clientCount} ${clientCount === 1 ? "client" : "clients"}`
+      : network.mode || "off",
+  );
+
+  const battery = status.battery || {};
+  setHeltecText(
+    "#heltec-battery",
+    battery.present ? `${battery.millivolts} mV (${battery.percent}%)` : "not detected",
+  );
+
+  const sx1262 = status.sx1262 || {};
+  setHeltecText("#heltec-radio-boot", sx1262.ok ? "OK" : `error ${sx1262.receiveCode}`);
+
+  const gps = status.gps || {};
+  setHeltecText(
+    "#heltec-gps-boot",
+    gps.nmeaSentences > 0 ? `${gps.nmeaSentences} NMEA${gps.fix ? ", fix" : ""}` : "no data",
+  );
+  const live = gps.live || {};
+  const state = gps.monitorState || "off";
+  heltecGpsActive = state === "running" || state === "starting";
+  setHeltecText("#heltec-gps-state", state.charAt(0).toUpperCase() + state.slice(1));
+
+  if (live.fix && Number.isFinite(Number(live.latitude))) {
+    setHeltecText(
+      "#heltec-gps-position",
+      `${Number(live.latitude).toFixed(6)}, ${Number(live.longitude).toFixed(6)}`,
+    );
+    setHeltecText(
+      "#heltec-gps-detail",
+      `${live.satellites || 0} satellites | HDOP ${formatHeltecNumber(live.hdop)} | ${formatHeltecNumber(live.altitudeMeters)} m`,
+    );
+  } else if (heltecGpsActive) {
+    setHeltecText("#heltec-gps-position", "Waiting for position fix");
+    setHeltecText(
+      "#heltec-gps-detail",
+      `${live.satellites || 0} satellites | ${live.sentences || 0} sentences | ${live.bytes || 0} bytes`,
+    );
+  } else {
+    setHeltecText("#heltec-gps-position", state === "exclusive" ? "GPS is used by another feature" : "GPS power is off");
+    setHeltecText("#heltec-gps-detail", "Start monitoring to read live NMEA data.");
+  }
+
+  const gpsButton = $("#heltec-gps-toggle");
+  gpsButton.textContent = heltecGpsActive ? "Stop GPS" : "Start GPS";
+  gpsButton.disabled = state === "stopping" || state === "exclusive";
+}
+
+function renderHeltecLoraStatus(status) {
+  heltecLoraStatus = status;
+  heltecLoraActive = Boolean(status.listening);
+  setHeltecText("#heltec-lora-state", heltecLoraActive ? "Listening" : "Stopped");
+  const input = $("#heltec-lora-frequency");
+  if (status.minimumFrequencyMHz !== undefined) input.min = status.minimumFrequencyMHz;
+  if (status.maximumFrequencyMHz !== undefined) input.max = status.maximumFrequencyMHz;
+  if (document.activeElement !== input && !heltecLoraActive && status.frequencyMHz) {
+    input.value = Number(status.frequencyMHz).toFixed(3);
+  }
+  input.disabled = heltecLoraActive;
+
+  let detail = `${status.packetsReceived || 0} packets`;
+  if (status.rssiDbm !== undefined) detail += ` | RSSI ${formatHeltecNumber(status.rssiDbm)} dBm`;
+  if (status.snrDb !== undefined) detail += ` | SNR ${formatHeltecNumber(status.snrDb)} dB`;
+  if (status.transmittedPackets) detail += ` | ${status.transmittedPackets} sent`;
+  setHeltecText("#heltec-lora-detail", detail);
+  setHeltecText("#heltec-lora-message", status.lastMessage || "No packets received");
+  setHeltecText("#heltec-lora-toggle", heltecLoraActive ? "Stop receiver" : "Start receiver");
+
+  const transmitPanel = $("#heltec-lora-transmit");
+  transmitPanel.classList.toggle("hidden", !status.transmitAvailable);
+  if (status.transmitAvailable) {
+    const cooldownMs = Number(status.transmitCooldownRemainingMs) || 0;
+    const transmitButton = $("#heltec-lora-transmit-button");
+    transmitButton.disabled = !heltecLoraActive || cooldownMs > 0;
+    const constraints = `Fixed ${formatHeltecNumber(status.transmitPowerDbm, 0)} dBm | ${status.maximumTransmitBytes || 64} ASCII bytes`;
+    setHeltecText(
+      "#heltec-lora-transmit-detail",
+      cooldownMs > 0
+        ? `${constraints} | wait ${Math.ceil(cooldownMs / 1000)}s`
+        : `${constraints} | explicit confirmation required`,
+    );
+  }
+}
+
+function renderHeltecGpsTrack(track) {
+  const list = $("#heltec-gps-track-list");
+  const points = Array.isArray(track.points) ? track.points : [];
+  list.replaceChildren();
+  const state = track.recording ? "recording valid fixes" : "GPS monitor stopped";
+  setHeltecText(
+    "#heltec-gps-track-summary",
+    points.length
+      ? `${points.length} of ${track.capacity || points.length} retained; ${state}`
+      : track.recording
+        ? "Waiting for a valid GPS fix"
+        : "Start GPS monitoring to record valid fixes.",
+  );
+  $("#heltec-gps-track-gpx").disabled = points.length === 0;
+
+  points
+    .slice()
+    .reverse()
+    .forEach((point) => {
+      const row = document.createElement("div");
+      row.className = "hardware-history-row";
+
+      const position = document.createElement("div");
+      position.className = "hardware-history-message";
+      position.textContent = `#${point.sequence || "?"} ${Number(point.latitude).toFixed(6)}, ${Number(point.longitude).toFixed(6)}`;
+
+      const metrics = document.createElement("div");
+      metrics.className = "hardware-history-metrics";
+      const detail = [`${point.satellites || 0} sat`];
+      if (point.hdop !== undefined) detail.push(`HDOP ${formatHeltecNumber(point.hdop)}`);
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{2}Z$/.test(point.utc || "")) {
+        detail.push(`${point.utc.slice(11, 19)} UTC`);
+      }
+      detail.push(formatHeltecAge(point.ageMs));
+      metrics.textContent = detail.join(" | ");
+
+      row.append(position, metrics);
+      list.appendChild(row);
+    });
+}
+
+function renderHeltecLoraHistory(history) {
+  const list = $("#heltec-lora-history-list");
+  const packets = Array.isArray(history.packets) ? history.packets : [];
+  list.replaceChildren();
+  setHeltecText(
+    "#heltec-lora-history-summary",
+    packets.length
+      ? `${packets.length} of ${history.capacity || packets.length} retained; newest first`
+      : "No packets recorded",
+  );
+
+  packets
+    .slice()
+    .reverse()
+    .forEach((packet) => {
+      const row = document.createElement("div");
+      row.className = "hardware-history-row";
+
+      const message = document.createElement("div");
+      message.className = "hardware-history-message";
+      message.textContent = `#${packet.sequence || "?"} ${packet.message || "(empty)"}`;
+
+      const metrics = document.createElement("div");
+      metrics.className = "hardware-history-metrics";
+      const signal = [];
+      if (packet.rssiDbm !== undefined) signal.push(`${formatHeltecNumber(packet.rssiDbm)} dBm`);
+      if (packet.snrDb !== undefined) signal.push(`SNR ${formatHeltecNumber(packet.snrDb)}`);
+      signal.push(formatHeltecAge(packet.ageMs));
+      metrics.textContent = signal.join(" | ");
+
+      row.append(message, metrics);
+      list.appendChild(row);
+    });
+}
+
+async function refreshHeltecStatus() {
+  try {
+    const boardStatus = JSON.parse(await requestGet("/api/heltec/status"));
+    $("#heltec-hardware").classList.remove("hidden");
+    renderHeltecBoardStatus(boardStatus);
+  } catch (error) {
+    $("#heltec-hardware").classList.add("hidden");
+    return false;
+  }
+
+  try {
+    const gpsTrack = JSON.parse(await requestGet("/api/heltec/gps/history"));
+    renderHeltecGpsTrack(gpsTrack);
+  } catch (error) {
+    setHeltecText("#heltec-gps-track-summary", "GPS track unavailable");
+  }
+  try {
+    const loraStatus = JSON.parse(await requestGet("/api/heltec/lora"));
+    renderHeltecLoraStatus(loraStatus);
+  } catch (error) {
+    setHeltecText("#heltec-lora-state", "Busy");
+  }
+  try {
+    const history = JSON.parse(await requestGet("/api/heltec/lora/history"));
+    renderHeltecLoraHistory(history);
+  } catch (error) {
+    setHeltecText("#heltec-lora-history-summary", "History unavailable");
+  }
+  return true;
+}
+
+async function initHeltecPanel() {
+  if (!(await refreshHeltecStatus())) return;
+  if (!heltecStatusTimer) heltecStatusTimer = setInterval(refreshHeltecStatus, 2000);
+}
+
+$("#heltec-refresh").addEventListener("click", refreshHeltecStatus);
+
+$("#heltec-diagnostics-download").addEventListener("click", async (event) => {
+  if (
+    !confirm(
+      "The diagnostics file can include the AP MAC, retained GPS coordinates, and received LoRa payloads. Download it?",
+    )
+  ) {
+    return;
+  }
+  event.currentTarget.disabled = true;
+  try {
+    const [hardware, gpsTrack, loraStatus, loraHistory] = await Promise.all([
+      requestGet("/api/heltec/status"),
+      requestGet("/api/heltec/gps/history"),
+      requestGet("/api/heltec/lora"),
+      requestGet("/api/heltec/lora/history"),
+    ]);
+    const snapshot = {
+      formatVersion: 1,
+      exportedAt: new Date().toISOString(),
+      hardware: JSON.parse(hardware),
+      gpsTrack: JSON.parse(gpsTrack),
+      loraStatus: JSON.parse(loraStatus),
+      loraHistory: JSON.parse(loraHistory),
+    };
+    downloadHeltecFile(
+      JSON.stringify(snapshot, null, 2),
+      "application/json",
+      "heltec-diagnostics",
+      "json",
+    );
+  } catch (error) {
+    alert("Diagnostics download failed: " + error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+
+$("#heltec-gps-toggle").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    await requestPost("/api/heltec/gps", { action: heltecGpsActive ? "stop" : "start" });
+  } catch (error) {
+    alert("GPS control failed: " + error.message);
+  }
+  await refreshHeltecStatus();
+});
+
+$("#heltec-gps-track-json").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    const track = JSON.parse(await requestGet("/api/heltec/gps/history"));
+    downloadHeltecFile(JSON.stringify(track, null, 2), "application/json", "heltec-gps-track", "json");
+  } catch (error) {
+    alert("GPS track download failed: " + error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+
+$("#heltec-gps-track-gpx").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    const track = JSON.parse(await requestGet("/api/heltec/gps/history"));
+    if (!Array.isArray(track.points) || track.points.length === 0) {
+      alert("No valid GPS fixes are available for GPX export.");
+      return;
+    }
+    downloadHeltecFile(heltecGpsTrackToGpx(track), "application/gpx+xml", "heltec-gps-track", "gpx");
+  } catch (error) {
+    alert("GPS track download failed: " + error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+
+$("#heltec-gps-track-clear").addEventListener("click", async (event) => {
+  if (!confirm("Clear the in-memory GPS fix track?")) return;
+  event.currentTarget.disabled = true;
+  try {
+    const track = JSON.parse(await requestPost("/api/heltec/gps/history", { action: "clear" }));
+    renderHeltecGpsTrack(track);
+  } catch (error) {
+    alert("GPS track clear failed: " + error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+
+$("#heltec-lora-toggle").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  const frequencyInput = $("#heltec-lora-frequency");
+  const frequencyMHz = Number(frequencyInput.value);
+  if (!frequencyInput.checkValidity() || !Number.isFinite(frequencyMHz)) {
+    alert(`Choose a frequency from ${frequencyInput.min} to ${frequencyInput.max} MHz.`);
+    event.currentTarget.disabled = false;
+    return;
+  }
+  try {
+    await requestPost("/api/heltec/lora", {
+      action: heltecLoraActive ? "stop" : "start",
+      frequencyMHz: frequencyMHz.toString(),
+    });
+  } catch (error) {
+    alert("LoRa control failed: " + error.message);
+  }
+  await refreshHeltecStatus();
+});
+
+$("#heltec-lora-transmit-button").addEventListener("click", async (event) => {
+  const payloadInput = $("#heltec-lora-payload");
+  const payload = payloadInput.value;
+  const maximumBytes = Number(heltecLoraStatus.maximumTransmitBytes) || 64;
+  if (!heltecLoraActive) {
+    alert("Start the LoRa receiver first to establish the transmit frequency.");
+    return;
+  }
+  if (!payload || payload.length > maximumBytes || !/^[\x20-\x7e]+$/.test(payload)) {
+    alert(`Enter 1-${maximumBytes} printable ASCII characters.`);
+    return;
+  }
+  const frequencyMHz = Number(heltecLoraStatus.frequencyMHz).toFixed(3);
+  const powerDbm = formatHeltecNumber(heltecLoraStatus.transmitPowerDbm, 0);
+  if (!confirm(`Transmit ${payload.length} bytes at ${frequencyMHz} MHz and ${powerDbm} dBm?`)) return;
+
+  event.currentTarget.disabled = true;
+  try {
+    await requestPost("/api/heltec/lora/transmit", {
+      payload,
+      confirm: "TRANSMIT",
+    });
+    payloadInput.value = "";
+    alert("LoRa packet transmitted and receiver restored.");
+  } catch (error) {
+    alert("LoRa transmission failed: " + error.message);
+  }
+  await refreshHeltecStatus();
+});
+
+$("#heltec-lora-history-download").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    const history = JSON.parse(await requestGet("/api/heltec/lora/history"));
+    downloadHeltecFile(
+      JSON.stringify(history, null, 2),
+      "application/json",
+      "heltec-lora-history",
+      "json",
+    );
+  } catch (error) {
+    alert("LoRa history download failed: " + error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+
+$("#heltec-lora-history-clear").addEventListener("click", async (event) => {
+  if (!confirm("Clear the in-memory LoRa receive history? The lifetime packet counter is preserved.")) return;
+  event.currentTarget.disabled = true;
+  try {
+    const history = JSON.parse(
+      await requestPost("/api/heltec/lora/history", { action: "clear" }),
+    );
+    renderHeltecLoraHistory(history);
+  } catch (error) {
+    alert("LoRa history clear failed: " + error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
 
 function getSerialCommand(fileName) {
   let extension = fileName.split(".");
@@ -1174,10 +1672,29 @@ $(".act-reboot").addEventListener("click", async (e) => {
   e.preventDefault();
   if (!confirm("Are you sure you want to REBOOT the device?")) return;
   Dialog.loading.show("Rebooting...");
-  await requestGet("/reboot");
-  setTimeout(() => {
-    location.reload();
-  }, 1000);
+  try {
+    await requestPost("/reboot", { action: "restart", confirm: "RESTART" });
+  } catch (error) {
+    Dialog.loading.hide();
+    alert("Reboot failed: " + error.message);
+    return;
+  }
+
+  // Wait until the delayed restart has taken the WebUI offline before checking for its return.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`/?restart-check=${Date.now()}`, { cache: "no-store" });
+      if (response.ok) {
+        window.location.href = "/";
+        return;
+      }
+    } catch (_) {}
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  Dialog.loading.hide();
+  alert("The device has not returned yet. Reconnect to its Wi-Fi network and reload this page.");
 });
 
 $(".navigator-canvas").addEventListener("click", async (e) => {
@@ -1666,6 +2183,7 @@ window.addEventListener("popstate", (event) => {
 
 (async function () {
   await fetchSystemInfo();
+  await initHeltecPanel();
 
   // Get initial state from URL parameters or use defaults
   const urlParams = getURLParams();

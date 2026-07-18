@@ -8,6 +8,9 @@
 #include "core/settings.h"
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h" // using common wifisetup
+#if !defined(LITE_VERSION)
+#include "modules/lora/LoRaRF.h"
+#endif
 #include "esp_task_wdt.h"
 #include "webFiles.h"
 #include <MD5Builder.h>
@@ -28,6 +31,36 @@ AsyncWebServer *server = nullptr; // initialise webserver
 const char *host = "bruce";
 String uploadFolder = "";
 static bool mdnsRunning = false;
+static volatile bool webUiRestartPending = false;
+
+static void delayedWebUiRestart(void *) {
+    vTaskDelay(pdMS_TO_TICKS(750));
+    ESP.restart();
+}
+
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+static SemaphoreHandle_t heltecApiMutex = nullptr;
+
+#if !defined(LITE_VERSION)
+bool heltecV4ToggleLoraReceiver(float frequencyMHz) {
+    if (!heltecApiMutex || xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) != pdTRUE) return false;
+
+    const LoRaRuntimeSnapshot current = loraRuntimeSnapshot();
+    bool ok = true;
+    if (current.listening) loraWebStopReceive();
+    else ok = loraWebStartReceive(frequencyMHz);
+
+    xSemaphoreGive(heltecApiMutex);
+    return ok;
+}
+
+void heltecV4PollLoraReceiver() {
+    if (!heltecApiMutex || xSemaphoreTake(heltecApiMutex, 0) != pdTRUE) return;
+    loraPollReceive();
+    xSemaphoreGive(heltecApiMutex);
+}
+#endif
+#endif
 
 // Generate random token
 String generateToken(int length = 24) {
@@ -42,6 +75,16 @@ String generateToken(int length = 24) {
 **  Turn off the WebUI
 **********************************************************************/
 void stopWebUi() {
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    extern bool heltecV4SetGpsMonitor(bool enabled);
+    heltecV4SetGpsMonitor(false);
+#if !defined(LITE_VERSION)
+    if (heltecApiMutex && xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) == pdTRUE) {
+        loraWebStopReceive();
+        xSemaphoreGive(heltecApiMutex);
+    }
+#endif
+#endif
     tft.setLogging(false);
     isWebUIActive = false;
     server->end();
@@ -405,6 +448,176 @@ void configureWebServer() {
         }
     });
 
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    if (!heltecApiMutex) heltecApiMutex = xSemaphoreCreateMutex();
+
+    // Board diagnostics use the same session authentication as the WebUI.
+    server->on("/api/heltec/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        extern String heltecV4HardwareStatusJson();
+        request->send(200, "application/json", heltecV4HardwareStatusJson());
+    });
+
+    server->on("/api/heltec/gps/history", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        extern String heltecV4GpsTrackJson();
+        request->send(200, "application/json", heltecV4GpsTrackJson());
+    });
+
+    server->on("/api/heltec/gps/history", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("action", true) || request->getParam("action", true)->value() != "clear") {
+            request->send(400, "application/json", "{\"error\":\"clear action is required\"}");
+            return;
+        }
+        extern void heltecV4ClearGpsTrack();
+        extern String heltecV4GpsTrackJson();
+        heltecV4ClearGpsTrack();
+        request->send(200, "application/json", heltecV4GpsTrackJson());
+    });
+
+    server->on("/api/heltec/gps", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("action", true)) {
+            request->send(400, "application/json", "{\"error\":\"missing action\"}");
+            return;
+        }
+        const String action = request->getParam("action", true)->value();
+        extern bool heltecV4SetGpsMonitor(bool enabled);
+        bool ok = false;
+        if (action == "start") ok = heltecV4SetGpsMonitor(true);
+        else if (action == "stop") ok = heltecV4SetGpsMonitor(false);
+        else {
+            request->send(400, "application/json", "{\"error\":\"invalid action\"}");
+            return;
+        }
+        if (!ok) {
+            request->send(409, "application/json", "{\"error\":\"GPS is in exclusive use\"}");
+            return;
+        }
+        extern String heltecV4HardwareStatusJson();
+        request->send(200, "application/json", heltecV4HardwareStatusJson());
+    });
+
+#if !defined(LITE_VERSION)
+    server->on("/api/heltec/lora/history", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!heltecApiMutex || xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+            request->send(409, "application/json", "{\"error\":\"LoRa service busy\"}");
+            return;
+        }
+        const String history = loraWebHistoryJson();
+        xSemaphoreGive(heltecApiMutex);
+        request->send(200, "application/json", history);
+    });
+
+    server->on("/api/heltec/lora/history", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("action", true) || request->getParam("action", true)->value() != "clear") {
+            request->send(400, "application/json", "{\"error\":\"clear action is required\"}");
+            return;
+        }
+        if (!heltecApiMutex || xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+            request->send(409, "application/json", "{\"error\":\"LoRa service busy\"}");
+            return;
+        }
+        loraWebClearHistory();
+        const String history = loraWebHistoryJson();
+        xSemaphoreGive(heltecApiMutex);
+        request->send(200, "application/json", history);
+    });
+
+    server->on("/api/heltec/lora", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!heltecApiMutex || xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+            request->send(409, "application/json", "{\"error\":\"LoRa service busy\"}");
+            return;
+        }
+        const String status = loraWebStatusJson();
+        xSemaphoreGive(heltecApiMutex);
+        request->send(200, "application/json", status);
+    });
+
+#ifdef LORA_WEB_TX_ENABLED
+    server->on("/api/heltec/lora/transmit", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("payload", true) || !request->hasParam("confirm", true)) {
+            request->send(400, "application/json", "{\"error\":\"payload and confirmation are required\"}");
+            return;
+        }
+        if (request->getParam("confirm", true)->value() != "TRANSMIT") {
+            request->send(400, "application/json", "{\"error\":\"explicit transmit confirmation is required\"}");
+            return;
+        }
+        if (!heltecApiMutex || xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+            request->send(409, "application/json", "{\"error\":\"LoRa service busy\"}");
+            return;
+        }
+
+        const LoRaWebTransmitResult result =
+            loraWebTransmit(request->getParam("payload", true)->value());
+        if (result == LoRaWebTransmitResult::Ok) {
+            const String status = loraWebStatusJson();
+            xSemaphoreGive(heltecApiMutex);
+            request->send(200, "application/json", status);
+            return;
+        }
+
+        int responseCode = 500;
+        if (
+            result == LoRaWebTransmitResult::EmptyPayload ||
+            result == LoRaWebTransmitResult::PayloadTooLong ||
+            result == LoRaWebTransmitResult::InvalidPayload
+        ) {
+            responseCode = 400;
+        } else if (
+            result == LoRaWebTransmitResult::NotListening || result == LoRaWebTransmitResult::Cooldown
+        ) {
+            responseCode = 409;
+        } else if (result == LoRaWebTransmitResult::Disabled) {
+            responseCode = 403;
+        }
+        JsonDocument errorDoc;
+        errorDoc["error"] = loraWebTransmitResultMessage(result);
+        String response;
+        serializeJson(errorDoc, response);
+        xSemaphoreGive(heltecApiMutex);
+        request->send(responseCode, "application/json", response);
+    });
+#endif
+
+    server->on("/api/heltec/lora", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("action", true)) {
+            request->send(400, "application/json", "{\"error\":\"missing action\"}");
+            return;
+        }
+        if (!heltecApiMutex || xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) != pdTRUE) {
+            request->send(409, "application/json", "{\"error\":\"LoRa service busy\"}");
+            return;
+        }
+
+        const String action = request->getParam("action", true)->value();
+        bool ok = true;
+        if (action == "start") {
+            if (!request->hasParam("frequencyMHz", true)) ok = false;
+            else {
+                const float frequencyMHz = request->getParam("frequencyMHz", true)->value().toFloat();
+                ok = loraWebStartReceive(frequencyMHz);
+            }
+        } else if (action == "stop") {
+            loraWebStopReceive();
+        } else {
+            ok = false;
+        }
+
+        const String status = loraWebStatusJson();
+        xSemaphoreGive(heltecApiMutex);
+        request->send(ok ? 200 : 400, "application/json", status);
+    });
+#endif
+#endif
+
     // Login
     server->on("/login", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (request->hasParam("username", true) && request->hasParam("password", true)) {
@@ -576,9 +789,32 @@ void configureWebServer() {
         }
     });
 
-    // Reboot device
-    server->on("/reboot", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (checkUserWebAuth(request)) { ESP.restart(); }
+    // Acknowledge an explicit reboot request before restarting so the browser can recover cleanly.
+    server->on("/reboot", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (
+            !request->hasParam("action", true) || !request->hasParam("confirm", true) ||
+            request->getParam("action", true)->value() != "restart" ||
+            request->getParam("confirm", true)->value() != "RESTART"
+        ) {
+            request->send(
+                400,
+                "application/json",
+                "{\"error\":\"restart action and confirmation are required\"}"
+            );
+            return;
+        }
+        if (webUiRestartPending) {
+            request->send(409, "application/json", "{\"error\":\"restart already pending\"}");
+            return;
+        }
+        webUiRestartPending = true;
+        if (xTaskCreate(delayedWebUiRestart, "webui_restart", 2048, nullptr, 1, nullptr) != pdPASS) {
+            webUiRestartPending = false;
+            request->send(500, "application/json", "{\"error\":\"unable to schedule restart\"}");
+            return;
+        }
+        request->send(202, "application/json", "{\"restarting\":true,\"delayMs\":750}");
     });
 
     // List files
@@ -772,6 +1008,10 @@ void startWebUi(bool mode_ap) {
     }
     tft.setLogging();
     drawWebUiScreen(mode_ap);
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    extern void heltecV4DrawWebUiStatus(bool apMode);
+    heltecV4DrawWebUiStatus(mode_ap);
+#endif
 #ifdef HAS_SCREEN // Headless always run in the background!
     while (!check(EscPress)) {
         // nothing here, just to hold the screen until the server is on.

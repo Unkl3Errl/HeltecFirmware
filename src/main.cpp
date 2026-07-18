@@ -478,6 +478,10 @@ void setup() {
     bruceConfig.bright = 100; // theres is no value yet
     bruceConfigPins.rotation = ROTATION;
     setup_gpio();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    extern void heltecV4DrawBootStage(const char *stage);
+    heltecV4DrawBootStage("Bruce display init");
+#endif
 #if defined(HAS_SCREEN)
     tft.init();
     tft.setRotation(bruceConfigPins.rotation);
@@ -487,12 +491,28 @@ void setup() {
     tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
     RAM_LOG("first-display-elem"); // first element drawn on screen
 #else
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    // SerialDisplayClass::begin() waits indefinitely for a USB CDC host.
+    // The Heltec OLED is handled by interface.cpp, so initialize only the
+    // vector display used by Bruce's WebUI logger.
+    tft.VectorDisplayClass::begin(TFT_WIDTH, TFT_HEIGHT);
+#else
     tft.begin();
+#endif
+#endif
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Storage init");
 #endif
     _pre_storage_gpio();
     begin_storage();
     RAM_LOG("after-storage"); // bruceConfig/bruceConfigPins loaded from FS
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Config + display");
+#endif
     begin_tft();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Clock + LED");
+#endif
     init_clock();
     init_led();
     RAM_LOG("after-tft-clock-led");
@@ -517,6 +537,9 @@ void setup() {
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Starting services");
+#endif
     // Some board interfaces initialize or reset the backlight in post-setup,
     // so re-apply the stored brightness after that stage completes.
     setBrightness(bruceConfig.bright, false);
@@ -568,6 +591,9 @@ void setup() {
     startSerialCommandsHandlerTask(true);
 
     wakeUpScreen();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Launching WebUI");
+#endif
     if (bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {
         bruceConfig.setStartupApp("");
     }
