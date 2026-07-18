@@ -1,0 +1,40 @@
+name: Build Heltec WiFi LoRa 32 V4
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
+          pip install platformio requests esptool intelhex
+
+      - name: Build Heltec V4 firmware
+        run: platformio run -e heltec-wifi-lora-32-v4
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bruce-heltec-wifi-lora-32-v4
+          path: Bruce-heltec-wifi-lora-32-v4.bin
+          retention-days: 5
+          if-no-files-found: error

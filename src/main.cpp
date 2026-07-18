@@ -202,7 +202,7 @@ void setup_gpio() {
         else
 #endif
             if (bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.SDCARD_bus.mosi)
-            initCC1101once(&sdcardSPI); // (ARDUINO_M5STACK_CARDPUTER) and (ESP32S3DEVKITC1) and devices that
+            initCC1101once(&sdcardSPI); // Devices that share the CC1101 and SD-card SPI bus
                                         // share CC1101 pin with only SDCard
         else initCC1101once(NULL);
     }

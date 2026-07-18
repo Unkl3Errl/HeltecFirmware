@@ -2,37 +2,20 @@
 #define Pins_Arduino_h
 
 #include <stdint.h>
-#include "soc/soc_caps.h"
 
 #define USB_VID 0x303a
 #define USB_PID 0x1001
 
-// Some boards have too low voltage on this pin (board design bug)
-// Use different pin with 3V and connect with 48
-// and change this setup for the chosen pin (for example 38)
-#define PIN_NEOPIXEL        48
-// BUILTIN_LED can be used in new Arduino API digitalWrite() like in Blink.ino
-static const uint8_t LED_BUILTIN = SOC_GPIO_PIN_COUNT+PIN_NEOPIXEL;
-#define BUILTIN_LED  LED_BUILTIN // backward compatibility
-#define LED_BUILTIN LED_BUILTIN  // allow testing #ifdef LED_BUILTIN
-// RGB_BUILTIN and RGB_BRIGHTNESS can be used in new Arduino API neopixelWrite()
-#define RGB_BUILTIN LED_BUILTIN
-#define RGB_BRIGHTNESS 64
-
-#define HAS_KEYBOARD    //has keyboard to use
-#define HAS_KEYBOARD_HID //has keyboard to use
-#define KB_HID_EXIT_MSG "Mid Btn + Space to exit"
-
 static const uint8_t TX = 43;
 static const uint8_t RX = 44;
 
-static const uint8_t SDA = 8;
-static const uint8_t SCL = 9;
+static const uint8_t SDA = 3;
+static const uint8_t SCL = 4;
 
-static const uint8_t SS    = 10;
-static const uint8_t MOSI  = 11;
-static const uint8_t MISO  = 13;
-static const uint8_t SCK   = 12;
+static const uint8_t SS = 8;
+static const uint8_t MOSI = 10;
+static const uint8_t MISO = 11;
+static const uint8_t SCK = 9;
 
 static const uint8_t A0 = 1;
 static const uint8_t A1 = 2;
@@ -70,7 +53,4 @@ static const uint8_t T12 = 12;
 static const uint8_t T13 = 13;
 static const uint8_t T14 = 14;
 
-// Deepsleep
-#define DEEPSLEEP_WAKEUP_PIN 0
-#define DEEPSLEEP_PIN_ACT LOW
-#endif /* Pins_Arduino_h */
+#endif

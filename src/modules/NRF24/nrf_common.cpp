@@ -55,7 +55,7 @@ bool nrf_start(NRF24_MODE mode) {
 #endif
 
     } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.SDCARD_bus.mosi) {
-        // CC1101 shares SPI with SDCard (Cardputer and CYDs)
+        // Some boards share the CC1101 and SD-card SPI bus.
 
         NRFSPI = &sdcardSPI;
     } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.CC1101_bus.mosi &&

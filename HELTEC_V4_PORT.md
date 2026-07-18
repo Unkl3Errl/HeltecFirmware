@@ -3,6 +3,10 @@
 This checkout adds the `heltec-wifi-lora-32-v4` PlatformIO environment for the
 standard ESP32-S3R2 V4 board with 16 MB flash and 2 MB QSPI PSRAM.
 
+The project is intentionally Heltec-only: PlatformIO exposes this single build
+target, the board registry contains only its custom definition and variant, and
+the build automation publishes only the Heltec V4 image.
+
 The port is based on `BruceDevices/firmware` `main` commit
 `ac869d3d99ba222fd2fe7f76b707e4929385bd4c`, verified against the fetched
 upstream branch on July 18, 2026.
@@ -149,6 +153,8 @@ Validated on the target board:
 - All Heltec WebUI status/control requests returned HTTP 200 after login
 - A clean Heltec target rebuild succeeded from the local PlatformIO cache with
   the internet service disabled and external DNS unavailable
+- A fully cacheless build succeeded after removing the shared PlatformIO object
+  cache, proving the reduced Heltec-only board tree builds from source
 - OLED, PRG status-page cycling, Wi-Fi AP, WebUI, 16 MB flash, and 2 MB PSRAM
 - OLED long-press controls for GPS monitor start/stop and LoRa RX start/stop
 - Hardware-page deep-sleep entry after button release and PRG wake

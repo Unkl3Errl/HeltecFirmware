@@ -194,7 +194,6 @@ String readUTF16(uint8_t *pkt, uint32_t offset, uint16_t len) {
 }
 
 void updateHashUI() {
-    // auto& d = M5Cardputer.Display;
     // drawMainBorderWithTitle("RESPONDER", true); // clear
 
     // 1) NTLM count
@@ -595,7 +594,6 @@ void responder() {
     Serial.println(F("Responder ready - Waiting for NBNS/LLMNR request..."));
 
     while (!check(EscPress)) {
-        // M5Cardputer.update();
         // unsigned long now = millis();
         // if (now - lastAnim > 250) {
         //  Choix de la fonction selon le count

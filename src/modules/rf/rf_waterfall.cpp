@@ -173,7 +173,7 @@ void rf_waterfall_run() {
                 delay(100);
             }
         }
-        tft.drawPixel(0, 0, 0); // Cardputer Case, need to call something to the tft.
+        tft.drawPixel(0, 0, 0); // Keep the display driver active on compact screens.
         tft.pushImage(0, current_line, screen_width, 1, frameBuffer);
         tft.drawFastHLine(0, current_line + 1, screen_width, TFT_DARKGREY);
 

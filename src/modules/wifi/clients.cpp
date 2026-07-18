@@ -1,5 +1,5 @@
 #ifndef LITE_VERSION
-// SSH borrowed from https://github.com/m5stack/M5Cardputer :)
+// SSH client support inherited from upstream Bruce.
 
 #include "clients.h"
 

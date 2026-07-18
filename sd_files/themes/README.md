@@ -17,7 +17,7 @@ The recommended height of the images is:
 | Device | Display size | Height |
 | --- | --- | --- |
 | T-Embed | 320x170 | 140px |
-| Cardputer StickCPlus | 240x135 | 105px |
+| Compact display | 240x135 | 105px |
 | Core / CYD | 320x240 | 180 |
 
 ## Theme file
@@ -62,5 +62,4 @@ You can use [Bruce Theme Builder](https://bruce.computer/build_theme.html) to se
 
 ## Setting a Theme
 Config > UI Theme > (Choose FS) > select the .json file and the theme will be set.
-
 

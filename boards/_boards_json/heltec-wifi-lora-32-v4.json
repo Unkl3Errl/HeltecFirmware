@@ -17,7 +17,7 @@
     "f_flash": "80000000L",
     "flash_mode": "dio",
     "mcu": "esp32s3",
-    "variant": "pinouts"
+    "variant": "heltec-wifi-lora-32-v4-variant"
   },
   "connectivity": ["bluetooth", "wifi"],
   "debug": {

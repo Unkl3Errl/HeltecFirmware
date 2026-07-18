@@ -227,7 +227,7 @@ bool initRfModule(String mode, float frequency) {
             yield();
 #endif
         } else if (bruceConfigPins.CC1101_bus.mosi ==
-                   bruceConfigPins.SDCARD_bus.mosi) { // (CARDPUTER) and (ESP32S3DEVKITC1) and devices that
+                   bruceConfigPins.SDCARD_bus.mosi) { // Devices that share the CC1101 and SD-card SPI bus
                                                       // share CC1101 pin with only SDCard
             initCC1101once(&sdcardSPI);
         } else if (bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.CC1101_bus.mosi &&

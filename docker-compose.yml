@@ -10,7 +10,7 @@ services:
       - pio_build:/work/.pio
     environment:
       # Optional overrides:
-      - PIO_ENVS=m5stack-cplus2
+      - PIO_ENVS=heltec-wifi-lora-32-v4
       - PLATFORMIO_CORE_DIR=/root/.platformio
     command: ["bash", "docker/run_all_envs.sh"]
 

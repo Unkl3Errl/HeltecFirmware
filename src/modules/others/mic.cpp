@@ -508,7 +508,7 @@ bool mic_record_wav_to_path(
 void mic_record_app() {
 
     // ===== LAYOUT CONSTANTS =====
-    const bool isTinyScreen = (tftHeight <= 150); // e.g. Cardputer: 135px tall
+    const bool isTinyScreen = (tftHeight <= 150);
     const int MARGIN = (tftWidth > 200) ? 10 : 5;
     const int HEADER_HEIGHT = (tftHeight > 200) ? 35 : (isTinyScreen ? 22 : 25);
     const int ITEM_HEIGHT = (tftHeight > 200) ? 30 : (isTinyScreen ? 18 : 22);
