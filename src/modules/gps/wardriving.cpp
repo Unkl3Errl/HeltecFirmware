@@ -17,6 +17,11 @@
 
 #define MAX_WAIT 5000
 
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+extern void heltecV4PrepareGpsForExclusiveUse();
+extern void heltecV4ReleaseGpsExclusiveUse();
+#endif
+
 #if __has_include(<NimBLEExtAdvertising.h>)
 #define NIMBLE_V2_PLUS 1
 #endif
@@ -52,9 +57,15 @@ Wardriving::~Wardriving() {
 #ifdef USE_BOOST /// ENABLE 5V OUTPUT
     PPM.disableOTG();
 #endif
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4ReleaseGpsExclusiveUse();
+#endif
 }
 
 void Wardriving::setup() {
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4PrepareGpsForExclusiveUse();
+#endif
     wifiNetworkCount = 0;
     bluetoothDeviceCount = 0;
     ioExpander.turnPinOnOff(IO_EXP_GPS, HIGH);

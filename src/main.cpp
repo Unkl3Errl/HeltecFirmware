@@ -193,15 +193,19 @@ void setup_gpio() {
     // Smoochiee v2 uses a AW9325 tro control GPS, MIC, Vibro and CC1101 RX/TX powerlines
     ioExpander.init(IO_EXPANDER_ADDRESS, &Wire);
 
+    // Do not pass GPIO_NUM_NC (-1/255) into the CC1101 library. Its setGDO0()
+    // path immediately calls pinMode(), even when no CC1101 is configured.
+    if (bruceConfigPins.CC1101_bus.cs != GPIO_NUM_NC && bruceConfigPins.CC1101_bus.io0 != GPIO_NUM_NC) {
 #if TFT_MOSI > 0
-    if (bruceConfigPins.CC1101_bus.mosi == (gpio_num_t)TFT_MOSI)
-        initCC1101once(&tft.getSPIinstance()); // (T_EMBED), CORE2 and others
-    else
+        if (bruceConfigPins.CC1101_bus.mosi == (gpio_num_t)TFT_MOSI)
+            initCC1101once(&tft.getSPIinstance()); // (T_EMBED), CORE2 and others
+        else
 #endif
-        if (bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.SDCARD_bus.mosi)
-        initCC1101once(&sdcardSPI); // (ARDUINO_M5STACK_CARDPUTER) and (ESP32S3DEVKITC1) and devices that
-                                    // share CC1101 pin with only SDCard
-    else initCC1101once(NULL);
+            if (bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.SDCARD_bus.mosi)
+            initCC1101once(&sdcardSPI); // (ARDUINO_M5STACK_CARDPUTER) and (ESP32S3DEVKITC1) and devices that
+                                        // share CC1101 pin with only SDCard
+        else initCC1101once(NULL);
+    }
     // (ARDUINO_M5STICK_C_PLUS) || (ARDUINO_M5STICK_C_PLUS2) and others that doesn´t share SPI with
     // other devices (need to change it when Bruce board comes to shore)
 }
@@ -433,6 +437,10 @@ void setup() {
     bruceConfig.bright = 100; // theres is no value yet
     bruceConfigPins.rotation = ROTATION;
     setup_gpio();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    extern void heltecV4DrawBootStage(const char *stage);
+    heltecV4DrawBootStage("Bruce display init");
+#endif
 #if defined(HAS_SCREEN)
     tft.init();
     tft.setRotation(bruceConfigPins.rotation);
@@ -441,10 +449,26 @@ void setup() {
     tft.setTextColor(TFT_PURPLE, TFT_BLACK);
     tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
 #else
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    // SerialDisplayClass::begin() waits indefinitely for a USB CDC host.
+    // The Heltec OLED is handled by interface.cpp, so initialize only the
+    // vector display used by Bruce's WebUI logger.
+    tft.VectorDisplayClass::begin(TFT_WIDTH, TFT_HEIGHT);
+#else
     tft.begin();
 #endif
+#endif
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Storage init");
+#endif
     begin_storage();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Config + display");
+#endif
     begin_tft();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Clock + LED");
+#endif
     init_clock();
     init_led();
 
@@ -466,6 +490,9 @@ void setup() {
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Starting services");
+#endif
     // Some board interfaces initialize or reset the backlight in post-setup,
     // so re-apply the stored brightness after that stage completes.
     setBrightness(bruceConfig.bright, false);
@@ -504,6 +531,9 @@ void setup() {
     startSerialCommandsHandlerTask(true);
 
     wakeUpScreen();
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    heltecV4DrawBootStage("Launching WebUI");
+#endif
     if (bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {
         bruceConfig.setStartupApp("");
     }

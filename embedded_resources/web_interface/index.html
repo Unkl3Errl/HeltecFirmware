@@ -47,6 +47,91 @@
           LittleFS [<span>0 MB</span>]
         </span>
       </div>
+      <section id="heltec-hardware" class="hardware-panel hidden">
+        <div class="hardware-panel-head">
+          <strong id="heltec-board-name">Heltec WiFi LoRa 32 V4</strong>
+          <div>
+            <button id="heltec-diagnostics-download" class="btn-action">Download diagnostics</button>
+            <button id="heltec-refresh" class="btn-action">Refresh</button>
+          </div>
+        </div>
+        <div class="hardware-summary">
+          <span>Firmware: <strong id="heltec-firmware">--</strong></span>
+          <span>Uptime: <strong id="heltec-uptime">--</strong></span>
+          <span>Heap: <strong id="heltec-heap">--</strong></span>
+          <span>PSRAM: <strong id="heltec-psram">--</strong></span>
+          <span>Network: <strong id="heltec-network">--</strong></span>
+          <span>Battery: <strong id="heltec-battery">--</strong></span>
+          <span>SX1262 boot: <strong id="heltec-radio-boot">--</strong></span>
+          <span>GPS boot: <strong id="heltec-gps-boot">--</strong></span>
+        </div>
+        <div class="hardware-modules">
+          <div class="hardware-module">
+            <div class="hardware-module-title">
+              <strong>Live GPS</strong>
+              <span id="heltec-gps-state">Off</span>
+            </div>
+            <div id="heltec-gps-position" class="hardware-value">GPS power is off</div>
+            <div id="heltec-gps-detail" class="hardware-detail">Start monitoring to read live NMEA data.</div>
+            <button id="heltec-gps-toggle" class="btn-action">Start GPS</button>
+            <div class="hardware-history">
+              <div class="hardware-history-head">
+                <strong>Recent GPS fixes</strong>
+                <div>
+                  <button id="heltec-gps-track-json" class="btn-action">Download JSON</button>
+                  <button id="heltec-gps-track-gpx" class="btn-action" disabled>Download GPX</button>
+                  <button id="heltec-gps-track-clear" class="btn-action">Clear</button>
+                </div>
+              </div>
+              <div id="heltec-gps-track-summary" class="hardware-detail">
+                Start GPS monitoring to record valid fixes.
+              </div>
+              <div id="heltec-gps-track-list" class="hardware-history-list"></div>
+            </div>
+          </div>
+          <div class="hardware-module">
+            <div class="hardware-module-title">
+              <strong>LoRa Receiver</strong>
+              <span id="heltec-lora-state">Stopped</span>
+            </div>
+            <div class="hardware-lora-config">
+              <label for="heltec-lora-frequency">Frequency</label>
+              <input id="heltec-lora-frequency" type="number" min="902" max="928" step="0.001" value="915" />
+              <span>MHz</span>
+            </div>
+            <div id="heltec-lora-detail" class="hardware-detail">Receive-only mode; no RF transmission.</div>
+            <div id="heltec-lora-message" class="hardware-value">No packets received</div>
+            <button id="heltec-lora-toggle" class="btn-action">Start receiver</button>
+            <div id="heltec-lora-transmit" class="hardware-lora-transmit hidden">
+              <label for="heltec-lora-payload">Constrained transmitter</label>
+              <input
+                id="heltec-lora-payload"
+                type="text"
+                maxlength="64"
+                autocomplete="off"
+                placeholder="Printable ASCII payload"
+              />
+              <div id="heltec-lora-transmit-detail" class="hardware-detail">
+                Start the receiver to establish a frequency before transmitting.
+              </div>
+              <button id="heltec-lora-transmit-button" class="btn-action" disabled>
+                Review &amp; transmit
+              </button>
+            </div>
+            <div class="hardware-history">
+              <div class="hardware-history-head">
+                <strong>Recent received packets</strong>
+                <div>
+                  <button id="heltec-lora-history-download" class="btn-action">Download JSON</button>
+                  <button id="heltec-lora-history-clear" class="btn-action">Clear</button>
+                </div>
+              </div>
+              <div id="heltec-lora-history-summary" class="hardware-detail">No packets recorded</div>
+              <div id="heltec-lora-history-list" class="hardware-history-list"></div>
+            </div>
+          </div>
+        </div>
+      </section>
       <div class="action-content">
         <span class="breadcrumb">
           <button
