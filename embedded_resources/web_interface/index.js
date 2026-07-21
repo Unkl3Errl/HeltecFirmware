@@ -303,6 +303,8 @@ async function runCommand(cmd) {
 let heltecGpsActive = false;
 let heltecLoraActive = false;
 let heltecLoraStatus = {};
+let heltecFieldLogActive = false;
+let heltecFieldOptionsInitialized = false;
 let heltecStatusTimer = null;
 
 function setHeltecText(id, value) {
@@ -466,6 +468,108 @@ function renderHeltecBoardStatus(status) {
   const gpsButton = $("#heltec-gps-toggle");
   gpsButton.textContent = heltecGpsActive ? "Stop GPS" : "Start GPS";
   gpsButton.disabled = state === "stopping" || state === "exclusive";
+
+  const ble = status.ble || {};
+  setHeltecText(
+    "#heltec-ble-api",
+    ble.apiEnabled
+      ? `${ble.advertising ? "advertising" : "enabled"} | ${ble.connectedClients || 0} connected | ${ble.connectionCount || 0} total`
+      : "off",
+  );
+}
+
+function renderHeltecFieldLog(status) {
+  heltecFieldLogActive = Boolean(status.active);
+  const gps = status.gps || {};
+  const ble = status.ble || {};
+  const storage = status.storage || {};
+  setHeltecText("#heltec-fieldlog-state", heltecFieldLogActive ? "Recording" : "Stopped");
+  setHeltecText(
+    "#heltec-fieldlog-value",
+    status.sessionId
+      ? `Session ${status.sessionId}, segment ${status.segment || 0} | ${formatHeltecBytes(storage.sessionBytes)}`
+      : "No field-log session has been started",
+  );
+  const details = [
+    `${gps.fixes || 0} GPS fixes`,
+    `${ble.observations || 0} BLE observations`,
+    `${ble.uniqueDevices || 0} unique BLE devices`,
+  ];
+  if (ble.enabled && heltecFieldLogActive) details.push(ble.scanning ? "BLE scan active" : "BLE scan paused");
+  if (status.resumeCount) details.push(`${status.resumeCount} reset ${status.resumeCount === 1 ? "resume" : "resumes"}`);
+  if (status.recoveredSegments) details.push(`${status.recoveredSegments} recovered tail ${status.recoveredSegments === 1 ? "segment" : "segments"}`);
+  if (status.lastError) details.push(`Error: ${status.lastError}`);
+  setHeltecText("#heltec-fieldlog-detail", details.join(" | "));
+
+  const gpsOption = $("#heltec-fieldlog-gps");
+  const bleOption = $("#heltec-fieldlog-ble");
+  const resumeOption = $("#heltec-fieldlog-resume");
+  if (!heltecFieldOptionsInitialized || heltecFieldLogActive) {
+    gpsOption.checked = Boolean(gps.enabled);
+    bleOption.checked = Boolean(ble.enabled);
+    resumeOption.checked = Boolean(status.autoResume);
+    heltecFieldOptionsInitialized = true;
+  }
+  gpsOption.disabled = heltecFieldLogActive;
+  bleOption.disabled = heltecFieldLogActive;
+  resumeOption.disabled = heltecFieldLogActive;
+  setHeltecText(
+    "#heltec-fieldlog-toggle",
+    heltecFieldLogActive ? "Stop field log" : "Start field log",
+  );
+}
+
+function downloadHeltecFieldLog(fileName) {
+  if (
+    !confirm(
+      "Field logs can contain precise coordinates, BLE addresses, and broadcast device names. Download this file?",
+    )
+  ) {
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = `/api/heltec/fieldlog/download?name=${encodeURIComponent(fileName)}`;
+  link.download = fileName;
+  link.click();
+}
+
+function renderHeltecFieldLogFiles(result) {
+  const list = $("#heltec-fieldlog-files");
+  list.replaceChildren();
+  const files = Array.isArray(result.files) ? result.files : [];
+  setHeltecText(
+    "#heltec-fieldlog-files-summary",
+    files.length
+      ? `${result.count || files.length} files | ${formatHeltecBytes(result.usedBytes)} of ${formatHeltecBytes(result.totalBytes)} used${result.truncated ? " | list truncated" : ""}`
+      : `No saved logs | ${formatHeltecBytes(result.usedBytes)} of ${formatHeltecBytes(result.totalBytes)} used`,
+  );
+  files
+    .slice()
+    .reverse()
+    .forEach((file) => {
+      const row = document.createElement("div");
+      row.className = "hardware-history-row";
+      const name = document.createElement("div");
+      name.className = "hardware-history-message";
+      name.textContent = `${file.name}${file.active ? " (active)" : ""}${file.tailComplete === false ? " (interrupted tail)" : ""}`;
+      const controls = document.createElement("div");
+      controls.className = "hardware-history-metrics";
+      const button = document.createElement("button");
+      button.className = "btn-action";
+      button.textContent = `Download ${formatHeltecBytes(file.sizeBytes)}`;
+      button.addEventListener("click", () => downloadHeltecFieldLog(file.name));
+      controls.appendChild(button);
+      row.append(name, controls);
+      list.appendChild(row);
+    });
+}
+
+async function refreshHeltecFieldLogFiles() {
+  try {
+    renderHeltecFieldLogFiles(JSON.parse(await requestGet("/api/heltec/fieldlog/files")));
+  } catch (error) {
+    setHeltecText("#heltec-fieldlog-files-summary", "Saved field logs unavailable");
+  }
 }
 
 function renderHeltecLoraStatus(status) {
@@ -608,11 +712,17 @@ async function refreshHeltecStatus() {
   } catch (error) {
     setHeltecText("#heltec-lora-history-summary", "History unavailable");
   }
+  try {
+    renderHeltecFieldLog(JSON.parse(await requestGet("/api/heltec/fieldlog")));
+  } catch (error) {
+    setHeltecText("#heltec-fieldlog-state", "Unavailable");
+  }
   return true;
 }
 
 async function initHeltecPanel() {
   if (!(await refreshHeltecStatus())) return;
+  await refreshHeltecFieldLogFiles();
   if (!heltecStatusTimer) heltecStatusTimer = setInterval(refreshHeltecStatus, 2000);
 }
 
@@ -628,11 +738,13 @@ $("#heltec-diagnostics-download").addEventListener("click", async (event) => {
   }
   event.currentTarget.disabled = true;
   try {
-    const [hardware, gpsTrack, loraStatus, loraHistory] = await Promise.all([
+    const [hardware, gpsTrack, loraStatus, loraHistory, fieldLog, fieldLogFiles] = await Promise.all([
       requestGet("/api/heltec/status"),
       requestGet("/api/heltec/gps/history"),
       requestGet("/api/heltec/lora"),
       requestGet("/api/heltec/lora/history"),
+      requestGet("/api/heltec/fieldlog"),
+      requestGet("/api/heltec/fieldlog/files"),
     ]);
     const snapshot = {
       formatVersion: 1,
@@ -641,6 +753,8 @@ $("#heltec-diagnostics-download").addEventListener("click", async (event) => {
       gpsTrack: JSON.parse(gpsTrack),
       loraStatus: JSON.parse(loraStatus),
       loraHistory: JSON.parse(loraHistory),
+      fieldLog: JSON.parse(fieldLog),
+      fieldLogFiles: JSON.parse(fieldLogFiles),
     };
     downloadHeltecFile(
       JSON.stringify(snapshot, null, 2),
@@ -654,6 +768,32 @@ $("#heltec-diagnostics-download").addEventListener("click", async (event) => {
     event.currentTarget.disabled = false;
   }
 });
+
+$("#heltec-fieldlog-toggle").addEventListener("click", async (event) => {
+  const gps = $("#heltec-fieldlog-gps").checked;
+  const ble = $("#heltec-fieldlog-ble").checked;
+  if (!heltecFieldLogActive && !gps && !ble) {
+    alert("Select GPS fixes, passive BLE observations, or both.");
+    return;
+  }
+  event.currentTarget.disabled = true;
+  try {
+    const response = await requestPost("/api/heltec/fieldlog", {
+      action: heltecFieldLogActive ? "stop" : "start",
+      gps: gps ? "true" : "false",
+      ble: ble ? "true" : "false",
+      autoResume: $("#heltec-fieldlog-resume").checked ? "true" : "false",
+    });
+    renderHeltecFieldLog(JSON.parse(response));
+    await refreshHeltecFieldLogFiles();
+  } catch (error) {
+    alert("Field-log control failed: " + error.message);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+});
+
+$("#heltec-fieldlog-files-refresh").addEventListener("click", refreshHeltecFieldLogFiles);
 
 $("#heltec-gps-toggle").addEventListener("click", async (event) => {
   event.currentTarget.disabled = true;

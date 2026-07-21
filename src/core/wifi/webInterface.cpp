@@ -18,6 +18,9 @@
 #include <esp32-hal-psram.h>
 #include <esp_heap_caps.h>
 #include <globals.h>
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+#include "field_logger.h"
+#endif
 
 File uploadFile;
 FS _webFS = LittleFS;
@@ -76,8 +79,10 @@ String generateToken(int length = 24) {
 **********************************************************************/
 void stopWebUi() {
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
-    extern bool heltecV4SetGpsMonitor(bool enabled);
-    heltecV4SetGpsMonitor(false);
+    if (!heltecFieldLoggerUsesGps()) {
+        extern bool heltecV4SetGpsMonitor(bool enabled);
+        heltecV4SetGpsMonitor(false);
+    }
 #if !defined(LITE_VERSION)
     if (heltecApiMutex && xSemaphoreTake(heltecApiMutex, pdMS_TO_TICKS(250)) == pdTRUE) {
         loraWebStopReceive();
@@ -458,6 +463,59 @@ void configureWebServer() {
         request->send(200, "application/json", heltecV4HardwareStatusJson());
     });
 
+    // Register specific paths before /fieldlog; AsyncWebServer also matches path prefixes.
+    server->on("/api/heltec/fieldlog/files", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        request->send(200, "application/json", heltecFieldLoggerFilesJson());
+    });
+
+    server->on("/api/heltec/fieldlog/download", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("name")) {
+            request->send(400, "application/json", "{\"error\":\"missing file name\"}");
+            return;
+        }
+        const String path = heltecFieldLoggerDownloadPath(request->getParam("name")->value());
+        if (path.length() == 0) {
+            request->send(404, "application/json", "{\"error\":\"field log not found\"}");
+            return;
+        }
+        request->send(LittleFS, path, "application/x-ndjson", true);
+    });
+
+    server->on("/api/heltec/fieldlog", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        request->send(200, "application/json", heltecFieldLoggerStatusJson());
+    });
+
+    server->on("/api/heltec/fieldlog", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("action", true)) {
+            request->send(400, "application/json", "{\"error\":\"missing action\"}");
+            return;
+        }
+        const String action = request->getParam("action", true)->value();
+        bool ok = false;
+        if (action == "start") {
+            const bool gps = !request->hasParam("gps", true) ||
+                             request->getParam("gps", true)->value() == "true" ||
+                             request->getParam("gps", true)->value() == "1";
+            const bool ble = !request->hasParam("ble", true) ||
+                             request->getParam("ble", true)->value() == "true" ||
+                             request->getParam("ble", true)->value() == "1";
+            const bool autoResume = !request->hasParam("autoResume", true) ||
+                                    request->getParam("autoResume", true)->value() == "true" ||
+                                    request->getParam("autoResume", true)->value() == "1";
+            ok = heltecFieldLoggerStart(gps, ble, autoResume);
+        } else if (action == "stop") {
+            ok = heltecFieldLoggerStop();
+        } else {
+            request->send(400, "application/json", "{\"error\":\"invalid action\"}");
+            return;
+        }
+        request->send(ok ? 200 : 409, "application/json", heltecFieldLoggerStatusJson());
+    });
+
     server->on("/api/heltec/gps/history", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (!checkUserWebAuth(request)) return;
         extern String heltecV4GpsTrackJson();
@@ -483,6 +541,10 @@ void configureWebServer() {
             return;
         }
         const String action = request->getParam("action", true)->value();
+        if (action == "stop" && heltecFieldLoggerUsesGps()) {
+            request->send(409, "application/json", "{\"error\":\"GPS is required by the active field log\"}");
+            return;
+        }
         extern bool heltecV4SetGpsMonitor(bool enabled);
         bool ok = false;
         if (action == "start") ok = heltecV4SetGpsMonitor(true);

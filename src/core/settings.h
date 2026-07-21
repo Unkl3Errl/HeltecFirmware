@@ -109,6 +109,10 @@ void setMacAddressMenu();
 
 #if !defined(LITE_VERSION)
 void enableBLEAPI();
+bool isBLEAPIEnabled();
+uint32_t bleApiConnectionCount();
+uint8_t bleApiConnectedClients();
+bool bleApiAdvertising();
 
 bool appStoreInstalled();
 

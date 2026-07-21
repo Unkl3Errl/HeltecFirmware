@@ -185,6 +185,23 @@ svg > path {
   padding: 7px;
   min-width: 0;
 }
+.hardware-field-log {
+  grid-column: 1 / -1;
+}
+.hardware-field-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 7px 0;
+}
+.hardware-field-options label {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+}
+.hardware-field-options input {
+  accent-color: var(--color);
+}
 .hardware-module-title {
   border-bottom: 1px solid var(--light-color);
   margin-bottom: 7px;

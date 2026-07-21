@@ -10,6 +10,7 @@ class BLEAPICallback : public NimBLEServerCallbacks {
     BLE_API *api;
 
     void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override {
+        api->noteConnection();
         pServer->updateConnParams(connInfo.getConnHandle(), 6, 24, 0, 400); // Improve latency
     };
 
@@ -42,10 +43,21 @@ void BLE_API::update_mtu(uint16_t mtu) {
     serial_service.setMTU(mtu);
 }
 
+void BLE_API::noteConnection() { totalConnections++; }
+
+uint32_t BLE_API::connectionCount() const { return totalConnections; }
+
+uint8_t BLE_API::connectedClients() const { return pServer ? pServer->getConnectedCount() : 0; }
+
+bool BLE_API::advertising() const {
+    return pServer && pServer->getAdvertising() && pServer->getAdvertising()->isAdvertising();
+}
+
 void BLE_API::end() {
     battery_service.end();
     serial_service.end();
     BLEDevice::deinit();
+    pServer = nullptr;
     serialDevice = &USBserial;
 }
 #endif

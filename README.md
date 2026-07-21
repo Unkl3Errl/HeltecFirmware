@@ -6,6 +6,22 @@ Bruce is a versatile ESP32 firmware packed with offensive-security tools, built 
 
 It also supports [M5Stack](https://shop.m5stack.com), [LILYGO](https://lilygo.cc) , [RockBase IoT](https://www.rockbaseiot.com) and [Elecrow](https://www.elecrow.com) products, and works great with the Cardputer, Sticks, M5Cores, T-Decks and T-Embeds.
 
+The customized Heltec WiFi LoRa 32 V4 build adds:
+
+- Six-page OLED status dashboard with PRG-button navigation, controls, and
+  deep-sleep entry.
+- Authenticated WebUI hardware, network, memory, GPS, and LoRa diagnostics.
+- Live GNSS monitoring with a bounded 16-fix track and JSON/GPX export.
+- Reset-resistant LittleFS field logging that appends GPS fixes and passive BLE
+  observations as NDJSON, resumes after a reset when enabled, and exposes
+  authenticated status and downloads in the WebUI.
+- SX1262 receive control with an eight-packet history and JSON export.
+- Constrained US915 WebUI transmission: 902–928 MHz, fixed 2 dBm, printable
+  payloads up to 64 bytes, per-packet confirmation, and cooldown.
+- Delayed, acknowledged WebUI restart with browser recovery polling.
+- Passive hardware smoke and soak validation that never supplies an RF
+  transmit confirmation.
+
 ## :zap: Get Our Official DevKit!
 
 # RF REAPER
@@ -81,6 +97,17 @@ Also, [read our FAQ](https://wiki.bruce.computer/faq/)
     - [x] [Optional] Flood uniq peer identifiers
 
 </details>
+
+### Heltec V4 field-log validation
+
+Downloaded field-log segments can be checked offline, including recovery after
+an interrupted final write:
+
+```sh
+python3 boards/heltec-wifi-lora-32-v4/validate_field_log.py ~/Downloads/session-*.ndjson
+```
+
+## Safety and legal use
 
 <details>
   <summary><h2>BLE</h2></summary>

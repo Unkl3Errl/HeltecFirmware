@@ -10,9 +10,14 @@ public:
     void setup();
     void end();
     void update_mtu(uint16_t mtu);
+    void noteConnection();
+    uint32_t connectionCount() const;
+    uint8_t connectedClients() const;
+    bool advertising() const;
 
 private:
-    NimBLEServer *pServer;
+    NimBLEServer *pServer = nullptr;
+    uint32_t totalConnections = 0;
     BatteryService battery_service;
     BLESerialService serial_service;
 };
