@@ -8,10 +8,13 @@ the attached GNSS module.
 
 ## Heltec V4 integration
 
-- Five-page OLED status dashboard with PRG-button navigation, controls, and
+- Six-page OLED status dashboard with PRG-button navigation, controls, and
   deep-sleep entry.
 - Authenticated WebUI hardware, network, memory, GPS, and LoRa diagnostics.
 - Live GNSS monitoring with a bounded 16-fix track and JSON/GPX export.
+- Reset-resistant LittleFS field logging that appends GPS fixes and passive BLE
+  observations as NDJSON, resumes after a reset when enabled, and exposes
+  authenticated status and downloads in the WebUI.
 - SX1262 receive control with an eight-packet history and JSON export.
 - Constrained US915 WebUI transmission: 902–928 MHz, fixed 2 dBm, printable
   payloads up to 64 bytes, per-packet confirmation, and cooldown.
@@ -60,6 +63,13 @@ board access point:
 
 ```sh
 python3 boards/heltec-wifi-lora-32-v4/validate_webui.py
+```
+
+Downloaded field-log segments can be checked offline, including recovery after
+an interrupted final write:
+
+```sh
+python3 boards/heltec-wifi-lora-32-v4/validate_field_log.py ~/Downloads/session-*.ndjson
 ```
 
 ## Safety and legal use

@@ -1669,6 +1669,14 @@ void enableBLEAPI() {
     ble_api_enabled = !ble_api_enabled;
 }
 
+bool isBLEAPIEnabled() { return ble_api_enabled; }
+
+uint32_t bleApiConnectionCount() { return bleApi.connectionCount(); }
+
+uint8_t bleApiConnectedClients() { return bleApi.connectedClients(); }
+
+bool bleApiAdvertising() { return bleApi.advertising(); }
+
 bool appStoreInstalled() {
     FS *fs;
     if (!getFsStorage(fs)) {

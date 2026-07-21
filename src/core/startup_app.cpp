@@ -38,7 +38,14 @@ StartupApp::StartupApp() {
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
     _startupApps["Wardriving"] = []() { Wardriving(); };
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    // The Heltec port is operated through its dedicated BruceNet AP. Avoid a
+    // station scan immediately before AP startup; on the ESP32-S3 that radio
+    // transition can leave the AP configured but not advertising.
+    _startupApps["WebUI"] = []() { startWebUi(true); };
+#else
     _startupApps["WebUI"] = []() { startWebUi(!wifiConnecttoKnownNet()); };
+#endif
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
     _startupApps["JS Interpreter"] = []() {
         FS *fs = nullptr;
