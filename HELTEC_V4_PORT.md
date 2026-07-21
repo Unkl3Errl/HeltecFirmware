@@ -39,6 +39,8 @@ upstream branch on July 18, 2026.
 - Holding PRG for two seconds on the hardware page enters deep sleep after the
   button is released; pressing PRG wakes the board
 - Deep-sleep wake using the PRG/BOOT button on GPIO 0
+- A hardware-aware main menu that hides generic RF/CC1101, NRF24, RFID,
+  infrared, W5500 Ethernet, and iButton features from the default image
 
 The onboard 128x64 SSD1306 OLED shows boot progress, WebUI connection details,
 live GPS state and counters, receive-only LoRa state, packet count, frequency,
@@ -53,6 +55,16 @@ is released.
 The onboard SX1262 pin mapping, V4 RF front-end controls, and default radio type
 are compiled in. Attach the correct antenna before using the radio and configure
 a legal frequency and transmit power for your region.
+
+The onboard SX1262 is exposed through **LoRa**, not Bruce's generic **RF**
+category. Generic RF, NRF24, RFID, infrared, Ethernet, iButton, and their
+accessory pin settings are hidden because the board has none of those devices.
+SD, FM, microphone, and audio entries remain absent through their existing
+hardware checks. The TFT-only Megalodon application is also hidden because its
+renderer explicitly does not support the Heltec vector display backend.
+Developers intentionally adding external modules can restore the accessory
+menus at build time with `-DHELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS`; they must
+then configure and validate the relevant pins and hardware themselves.
 
 Leaving LoRa chat now puts the SX1262 to sleep, closes its dedicated SPI bus,
 and powers down the RF front end. Deep sleep also disables the RF front end,
