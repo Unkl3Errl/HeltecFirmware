@@ -389,17 +389,6 @@ static const JSPropDef js_badusb[] = {
 
 const JSClassDef js_badusb_obj = JS_OBJECT_DEF("BadUSB", js_badusb);
 
-/* IR module */
-static const JSPropDef js_ir[] = {
-    JS_CFUNC_DEF("read", 1, native_irRead),
-    JS_CFUNC_DEF("readRaw", 1, native_irReadRaw),
-    JS_CFUNC_DEF("transmitFile", 1, native_irTransmitFile),
-    JS_CFUNC_DEF("transmit", 3, native_irTransmit),
-    JS_PROP_END,
-};
-
-const JSClassDef js_ir_obj = JS_OBJECT_DEF("IR", js_ir);
-
 /* Dialog module */
 static const JSPropDef js_dialog[] = {
     JS_CFUNC_DEF("message", 2, native_dialogMessage),
@@ -418,20 +407,6 @@ static const JSPropDef js_dialog[] = {
 };
 
 const JSClassDef js_dialog_obj = JS_OBJECT_DEF("Dialog", js_dialog);
-
-const JSPropDef js_subghz[] = {
-    JS_CFUNC_DEF("transmitFile", 1, native_subghzTransmitFile),
-    JS_CFUNC_DEF("transmit", 4, native_subghzTransmit),
-    JS_CFUNC_DEF("read", 1, native_subghzRead),
-    JS_CFUNC_DEF("readRaw", 1, native_subghzReadRaw),
-    JS_CFUNC_DEF("setFrequency", 1, native_subghzSetFrequency),
-    JS_CFUNC_DEF("txSetup", 1, native_subghzTxSetup),
-    JS_CFUNC_DEF("txPulses", 1, native_subghzTxPulses),
-    JS_CFUNC_DEF("txEnd", 0, native_subghzTxEnd),
-    JS_PROP_END,
-};
-
-const JSClassDef js_subghz_obj = JS_OBJECT_DEF("SubGHz", js_subghz);
 
 const JSPropDef js_serial[] = {
     JS_CFUNC_DEF("print", 1, native_serialPrint),
@@ -536,28 +511,6 @@ static const JSPropDef js_mic[] = {
 
 const JSClassDef js_mic_obj = JS_OBJECT_DEF("Mic", js_mic);
 
-/* Rfid module */
-static const JSPropDef js_rfid[] = {
-    JS_CFUNC_DEF("read", 1, native_rfidRead),
-    JS_CFUNC_DEF("readUID", 1, native_rfidReadUID),
-    JS_CFUNC_DEF("write", 1, native_rfidWrite),
-    JS_CFUNC_DEF("save", 1, native_rfidSave),
-    JS_CFUNC_DEF("load", 1, native_rfidLoad),
-    JS_CFUNC_DEF("clear", 0, native_rfidClear),
-    JS_CFUNC_DEF("addMifareKey", 1, native_rfid_AddMifareKey),
-
-    // SRIX functions
-    JS_CFUNC_DEF("srixRead", 1, native_srixRead),
-    JS_CFUNC_DEF("srixWrite", 1, native_srixWrite),
-    JS_CFUNC_DEF("srixSave", 1, native_srixSave),
-    JS_CFUNC_DEF("srixLoad", 1, native_srixLoad),
-    JS_CFUNC_DEF("srixClear", 0, native_srixClear),
-    JS_CFUNC_DEF("srixWriteBlock", 2, native_srixWriteBlock),
-    JS_PROP_END,
-};
-
-const JSClassDef js_rfid_obj = JS_OBJECT_DEF("Rfid", js_rfid);
-
 /* Runtime module */
 static const JSPropDef js_runtime[] = {
     JS_CFUNC_DEF("toBackground", 0, native_runtimeToBackground),
@@ -578,18 +531,6 @@ static const JSPropDef js_ble[] = {
 };
 
 const JSClassDef js_ble_obj = JS_OBJECT_DEF("BLE", js_ble);
-
-/* NRF24 module */
-static const JSPropDef js_nrf24[] = {
-    JS_CFUNC_DEF("begin", 1, native_nrf24Begin),
-    JS_CFUNC_DEF("send", 2, native_nrf24Send),
-    JS_CFUNC_DEF("receive", 1, native_nrf24Receive),
-    JS_CFUNC_DEF("setChannel", 1, native_nrf24SetChannel),
-    JS_CFUNC_DEF("isConnected", 0, native_nrf24IsConnected),
-    JS_PROP_END,
-};
-
-const JSClassDef js_nrf24_obj = JS_OBJECT_DEF("NRF24", js_nrf24);
 
 /* LED module */
 static const JSPropDef js_led[] = {
@@ -843,18 +784,14 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("dialog", &js_dialog_obj),
     JS_PROP_CLASS_DEF("gpio", &js_gpio_obj),
     JS_PROP_CLASS_DEF("i2c", &js_i2c_obj),
-    JS_PROP_CLASS_DEF("ir", &js_ir_obj),
     JS_PROP_CLASS_DEF("keyboard", &js_keyboard_obj),
     JS_PROP_CLASS_DEF("notification", &js_notification_obj),
     JS_PROP_CLASS_DEF("mic", &js_mic_obj),
-    JS_PROP_CLASS_DEF("rfid", &js_rfid_obj),
     JS_PROP_CLASS_DEF("runtime", &js_runtime_obj),
     JS_PROP_CLASS_DEF("serial", &js_serial_obj),
     JS_PROP_CLASS_DEF("storage", &js_storage_obj),
-    JS_PROP_CLASS_DEF("subghz", &js_subghz_obj),
     JS_PROP_CLASS_DEF("wifi", &js_wifi_obj),
     JS_PROP_CLASS_DEF("ble", &js_ble_obj),
-    JS_PROP_CLASS_DEF("nrf24", &js_nrf24_obj),
     JS_PROP_CLASS_DEF("led", &js_led_obj),
     JS_PROP_CLASS_DEF("menu", &js_menu_obj),
 

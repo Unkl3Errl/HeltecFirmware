@@ -1,5 +1,4 @@
 #include "config.h"
-#include "mifare_keys_manager.h"
 #include "sd_functions.h"
 
 JsonDocument BruceConfig::toJson() const {
@@ -432,9 +431,6 @@ void BruceConfig::fromFile(bool checkFS) {
     validateConfig();
     if (count > 0) saveFile();
 
-    // Load MIFARE keys (loading via manager)
-    MifareKeysManager::ensureLoaded(mifareKeys);
-
     log_i("Using config from file");
 }
 
@@ -482,7 +478,6 @@ void BruceConfig::validateConfig() {
     validateLedEffectSpeedValue();
     validateLedEffectDirectionValue();
 #endif
-    validateMifareKeysItems();
     validateDevModeValue();
     validateColorInverted();
     validateBadUSBBLEKeyboardLayout();
@@ -810,10 +805,6 @@ void BruceConfig::setBadUSBBLEShowOutput(bool value) {
     badUSBBLEShowOutput = value;
     saveFile();
 }
-void BruceConfig::addMifareKey(String value) { MifareKeysManager::addKey(mifareKeys, value); }
-
-void BruceConfig::validateMifareKeysItems() { MifareKeysManager::validateKeys(mifareKeys); }
-
 void BruceConfig::addDisabledMenu(String value) {
     // TODO: check if duplicate
     disabledMenus.push_back(value);

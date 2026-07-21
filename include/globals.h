@@ -77,7 +77,6 @@ extern StartupApp startupApp;
 
 extern char timeStr[16];
 extern SPIClass sdcardSPI;
-extern SPIClass CC_NRF_SPI;
 extern bool clock_set;
 extern time_t localTime;
 extern struct tm *timeInfo;

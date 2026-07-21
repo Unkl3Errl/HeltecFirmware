@@ -355,8 +355,6 @@ public:
     bool advertisingSpam(std::vector<NimBLEAddress> targets);
     bool mitmAttackSingle(NimBLEAddress target);
     bool mitmAttack(std::vector<NimBLEAddress> targets);
-    bool nrf24JamAttack(int jamMode = 0);
-    bool jamAndConnect(NimBLEAddress target);
     void cleanup();
 
 private:

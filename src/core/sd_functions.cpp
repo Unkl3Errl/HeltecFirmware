@@ -4,14 +4,11 @@
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/gps/wdgwars.h"
 #include "modules/gps/wigle.h"
-#include "modules/ir/TV-B-Gone.h"
-#include "modules/ir/custom_ir.h"
 #include "modules/others/audio.h"
 #if defined(HAS_NS4168_SPKR)
 #include "modules/others/audio_player.h"
 #endif
 #include "modules/others/qrcode_menu.h"
-#include "modules/rf/rf_send.h"
 #include "mykeyboard.h" // using keyboard when calling rename
 #include "passwords.h"
 #include "scrollableTextArea.h"
@@ -82,11 +79,6 @@ bool setupSdCard() {
         delay(10);
         if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
             result = false;
-#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-            // If using Shared SPI, do not stop the bus if SDCard is not present
-            // If using Legacy, release the pins from this SPI Bus
-            if (bruceConfigPins.SDCARD_bus.miso != bruceConfigPins.CC1101_bus.miso) sdcardSPI.end();
-#endif
         }
         Serial.println("SDCard in a different Bus, using sdcardSPI instance");
     }
@@ -584,7 +576,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
     String Folder = rootPath;
     String PreFolder = rootPath;
     tft.drawPixel(0, 0, 0);
-    tft.fillScreen(bruceConfig.bgColor); // TODO: Does only the T-Embed CC1101 need this?
+    tft.fillScreen(bruceConfig.bgColor);
     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     if (&fs == &SD) {
         if (!setupSdCard()) {
@@ -762,24 +754,6 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              delay(750);
                                                              while (!check(AnyKeyPress))
                                                                  vTaskDelay(10 / portTICK_PERIOD_MS);
-                                                         }});
-                    if (filepath.endsWith(".ir")) {
-                        options.insert(options.begin(), {"IR Choose cmd", [&]() {
-                                                             delay(200);
-                                                             chooseCmdIrFile(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
-                                                             delay(200);
-                                                             txIrFile(&fs, filepath);
-                                                         }});
-                    }
-                    if (filepath.endsWith(".sub"))
-                        options.insert(options.begin(), {"Subghz Tx", [&]() {
-                                                             delay(200);
-                                                             RfCodes data{};
-
-                                                             if (readSubFile(&fs, filepath, data))
-                                                                 txSubFile(data);
                                                          }});
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {

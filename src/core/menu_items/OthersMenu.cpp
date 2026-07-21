@@ -5,9 +5,6 @@
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/others/clicker.h"
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS)
-#include "modules/others/ibutton.h"
-#endif
 #include "modules/others/mic.h"
 #include "modules/others/qrcode_menu.h"
 #if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4)
@@ -32,11 +29,6 @@ void OthersMenu::optionsMenu() {
 #if defined(USB_as_HID)
         {"BadUSB & HID", [this]() { badUsbHidMenu(); }},
 #endif
-#endif
-
-#if !defined(LITE_VERSION) &&                                                                                 \
-    (!defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS))
-        {"iButton",      setup_ibutton                },
 #endif
 
         // Timer removed - moved to another "Clock"

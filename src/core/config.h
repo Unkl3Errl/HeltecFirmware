@@ -77,9 +77,6 @@ public:
         saveFile(); // opcional, para salvar imediatamente
     }
 
-    // RFID
-    std::set<String> mifareKeys = {};
-
     // Misc
     String startupApp = "";
     String startupAppJSInterpreterFile = "";
@@ -172,10 +169,6 @@ public:
     void validateEvilEndpointSsid();
     void validateEvilPasswordMode();
     void validateEvilGatewayIp();
-
-    // RFID
-    void addMifareKey(String value);
-    void validateMifareKeysItems();
 
     // Misc
     void setStartupApp(String value);

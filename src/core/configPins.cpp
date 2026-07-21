@@ -2,6 +2,11 @@
 #include "esp_mac.h"
 #include "sd_functions.h"
 #include <globals.h>
+
+namespace {
+constexpr int PIN_CONFIG_SCHEMA_VERSION = 2;
+}
+
 String getMacAddress() {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -30,6 +35,8 @@ void BruceConfigPins::fromJson(JsonObject obj) {
 
     JsonObject root = obj[mac].as<JsonObject>();
 
+    if ((root["schemaVersion"] | 0) != PIN_CONFIG_SCHEMA_VERSION) count++;
+
     if (!root["rot"].isNull()) {
         rotation = root["rot"].as<int>();
     } else {
@@ -39,69 +46,6 @@ void BruceConfigPins::fromJson(JsonObject obj) {
 
     if (!root["bleName"].isNull()) {
         bleName = root["bleName"].as<String>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
-    if (!root["irTx"].isNull()) {
-        irTx = root["irTx"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["irTxRepeats"].isNull()) {
-        irTxRepeats = root["irTxRepeats"].as<uint8_t>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["irRx"].isNull()) {
-        irRx = root["irRx"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
-    if (!root["rfTx"].isNull()) {
-        rfTx = root["rfTx"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["rfRx"].isNull()) {
-        rfRx = root["rfRx"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["rfModule"].isNull()) {
-        rfModule = root["rfModule"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["rfFreq"].isNull()) {
-        rfFreq = root["rfFreq"].as<float>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["rfFxdFreq"].isNull()) {
-        rfFxdFreq = root["rfFxdFreq"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["rfScanRange"].isNull()) {
-        rfScanRange = root["rfScanRange"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
-    if (!root["rfidModule"].isNull()) {
-        rfidModule = root["rfidModule"].as<int>();
     } else {
         count++;
         log_e("Fail");
@@ -118,41 +62,6 @@ void BruceConfigPins::fromJson(JsonObject obj) {
 
     if (!root["gpsBaudrate"].isNull()) {
         gpsBaudrate = root["gpsBaudrate"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
-    if (!root["CC1101_Pins"].isNull()) {
-        SPIPins def = CC1101_bus;
-        CC1101_bus.fromJson(root["CC1101_Pins"].as<JsonObject>());
-        if (CC1101_bus.sck == GPIO_NUM_NC && def.sck != GPIO_NUM_NC) {
-            CC1101_bus = def;
-            count++;
-        }
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
-    if (!root["NRF24_Pins"].isNull()) {
-        SPIPins def = NRF24_bus;
-        NRF24_bus.fromJson(root["NRF24_Pins"].as<JsonObject>());
-        if (NRF24_bus.sck == GPIO_NUM_NC && def.sck != GPIO_NUM_NC) {
-            NRF24_bus = def;
-            count++;
-        }
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!root["PN532_Pins"].isNull()) {
-        SPIPins def = PN532_bus;
-        PN532_bus.fromJson(root["PN532_Pins"].as<JsonObject>());
-        if (PN532_bus.sck == GPIO_NUM_NC && def.sck != GPIO_NUM_NC) {
-            PN532_bus = def;
-            count++;
-        }
     } else {
         count++;
         log_e("Fail");
@@ -220,29 +129,11 @@ void BruceConfigPins::fromJson(JsonObject obj) {
 void BruceConfigPins::toJson(JsonObject obj) const {
     JsonObject root = obj[getMacAddress()].to<JsonObject>();
 
+    root["schemaVersion"] = PIN_CONFIG_SCHEMA_VERSION;
     root["rot"] = rotation;
-    root["irTx"] = irTx;
-    root["irTxRepeats"] = irTxRepeats;
-    root["irRx"] = irRx;
-    root["rfTx"] = rfTx;
-    root["rfRx"] = rfRx;
-    root["rfModule"] = rfModule;
-    root["rfFreq"] = rfFreq;
-    root["rfFxdFreq"] = rfFxdFreq;
-    root["rfScanRange"] = rfScanRange;
     root["bleName"] = bleName;
-    root["rfidModule"] = rfidModule;
     root["gpsBaudrate"] = gpsBaudrate;
     root["iButton"] = iButton;
-
-    JsonObject _CC1101 = root["CC1101_Pins"].to<JsonObject>();
-    CC1101_bus.toJson(_CC1101);
-
-    JsonObject _NRF = root["NRF24_Pins"].to<JsonObject>();
-    NRF24_bus.toJson(_NRF);
-
-    JsonObject _PN532 = root["PN532_Pins"].to<JsonObject>();
-    PN532_bus.toJson(_PN532);
 
     JsonObject _SD = root["SDCard_Pins"].to<JsonObject>();
     SDCARD_bus.toJson(_SD);
@@ -360,17 +251,11 @@ void BruceConfigPins::factoryReset() {
 
 void BruceConfigPins::validateConfig() {
     validateRotationValue();
-    validateRfScanRangeValue();
-    validateRfModuleValue();
-    validateRfidModuleValue();
     validateGpsBaudrateValue();
 #if !defined(LITE_VERSION)
     validateSpiPins(LoRa_bus);
     validateSpiPins(W5500_bus);
 #endif
-    validateSpiPins(CC1101_bus);
-    validateSpiPins(NRF24_bus);
-    validateSpiPins(PN532_bus);
     validateSpiPins(SDCARD_bus);
     validateI2CPins(i2c_bus);
     validateUARTPins(uart_bus);
@@ -388,24 +273,6 @@ void BruceConfigPins::setW5500Pins(SPIPins value) {
     saveFile();
 }
 #endif
-void BruceConfigPins::setCC1101Pins(SPIPins value) {
-    CC1101_bus = value;
-    validateSpiPins(CC1101_bus);
-    saveFile();
-}
-
-void BruceConfigPins::setNrf24Pins(SPIPins value) {
-    NRF24_bus = value;
-    validateSpiPins(NRF24_bus);
-    saveFile();
-}
-
-void BruceConfigPins::setPn532Pins(SPIPins value) {
-    PN532_bus = value;
-    validateSpiPins(PN532_bus);
-    saveFile();
-}
-
 void BruceConfigPins::setSDCardPins(SPIPins value) {
     SDCARD_bus = value;
     validateSpiPins(SDCARD_bus);
@@ -458,76 +325,6 @@ void BruceConfigPins::validateRotationValue() {
 void BruceConfigPins::setBleName(String value) {
     bleName = value;
     saveFile();
-}
-
-void BruceConfigPins::setIrTxPin(int value) {
-    irTx = value;
-    saveFile();
-}
-
-void BruceConfigPins::setIrTxRepeats(uint8_t value) {
-    irTxRepeats = value;
-    saveFile();
-}
-
-void BruceConfigPins::setIrRxPin(int value) {
-    irRx = value;
-    saveFile();
-}
-
-void BruceConfigPins::setRfTxPin(int value) {
-    rfTx = value;
-    saveFile();
-}
-
-void BruceConfigPins::setRfRxPin(int value) {
-    rfRx = value;
-    saveFile();
-}
-
-void BruceConfigPins::setRfModule(RFModules value) {
-    rfModule = value;
-    validateRfModuleValue();
-    saveFile();
-}
-
-void BruceConfigPins::validateRfModuleValue() {
-    if (rfModule != M5_RF_MODULE && rfModule != CC1101_SPI_MODULE) { rfModule = M5_RF_MODULE; }
-}
-
-void BruceConfigPins::setRfFreq(float value, int fxdFreq) {
-    rfFreq = value;
-    if (fxdFreq > 1) rfFxdFreq = fxdFreq;
-    saveFile();
-}
-
-void BruceConfigPins::setRfFxdFreq(float value) {
-    rfFxdFreq = value;
-    saveFile();
-}
-
-void BruceConfigPins::setRfScanRange(int value, int fxdFreq) {
-    rfScanRange = value;
-    rfFxdFreq = fxdFreq;
-    validateRfScanRangeValue();
-    saveFile();
-}
-
-void BruceConfigPins::validateRfScanRangeValue() {
-    if (rfScanRange < 0 || rfScanRange > 3) rfScanRange = 3;
-}
-
-void BruceConfigPins::setRfidModule(RFIDModules value) {
-    rfidModule = value;
-    validateRfidModuleValue();
-    saveFile();
-}
-
-void BruceConfigPins::validateRfidModuleValue() {
-    if (rfidModule != M5_RFID2_MODULE && rfidModule != PN532_I2C_MODULE && rfidModule != PN532_SPI_MODULE &&
-        rfidModule != RC522_SPI_MODULE && rfidModule != PN532_I2C_SPI_MODULE) {
-        rfidModule = M5_RFID2_MODULE;
-    }
 }
 
 void BruceConfigPins::setiButtonPin(int value) {

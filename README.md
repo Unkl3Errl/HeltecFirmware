@@ -21,9 +21,12 @@ the attached GNSS module.
 - Delayed, acknowledged WebUI restart with browser recovery polling.
 - Passive hardware smoke and soak validation that never supplies an RF
   transmit confirmation.
-- Hardware-aware menus: the default Heltec build omits accessory-only RF,
-  NRF24, RFID, infrared, Ethernet, iButton, audio, and SD entries that cannot
-  operate with the onboard hardware, plus the TFT-only Megalodon application.
+- Heltec-only capability surface: unsupported infrared, generic Sub-GHz/CC1101,
+  RFID/NFC, and NRF24 implementations are removed from the source tree, serial
+  CLI, JavaScript runtime, configuration schema, startup hooks, bundled assets,
+  and dependencies. The onboard SX1262 remains available through LoRa.
+- Hardware-aware menus also omit Ethernet, iButton, audio, SD, and the TFT-only
+  Megalodon application when no usable onboard path exists.
 
 The complete pin map, endpoint contract, safety constraints, and target-board
 validation record are in [HELTEC_V4_PORT.md](HELTEC_V4_PORT.md).
@@ -45,11 +48,6 @@ pio run -e heltec-wifi-lora-32-v4
 ```
 
 The merged flash image is written to `Bruce-heltec-wifi-lora-32-v4.bin`.
-
-External accessory menus can be restored deliberately by adding
-`-DHELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS` to the Heltec environment build flags
-and configuring the corresponding module pins. The default image keeps these
-menus hidden so every visible hardware category has a usable onboard path.
 
 ## Flash
 

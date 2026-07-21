@@ -3,6 +3,7 @@ import os
 import subprocess
 import hashlib
 import shutil
+import platform
 
 PIOENV = env.subst("$PIOENV")
 MQJS_PATH = os.path.join(".pio/libdeps", PIOENV, "mquickjs")
@@ -22,9 +23,13 @@ SRC = [
 CFLAGS = [
     "-Wall",
     "-O2",
-    "-m32",
     "-I" + MQJS_PATH,
 ]
+
+# Modern macOS SDKs no longer provide a 32-bit host runtime. The generator emits
+# C tables rather than a host binary blob, so native host compilation is valid.
+if platform.system() != "Darwin":
+    CFLAGS.insert(2, "-m32")
 
 HOST_CC = "gcc"
 
@@ -40,19 +45,15 @@ INCLUDES = [
     'globals_js',
     'gpio_js',
     'i2c_js',
-    'ir_js',
     'keyboard_js',
     'led_js',
     'math_js',
     'menu_js',
     'mic_js',
     'notification_js',
-    'nrf24_js',
-    'rfid_js',
     'runtime_js',
     'serial_js',
     'storage_js',
-    'subghz_js',
     'wifi_js',
 ]
 

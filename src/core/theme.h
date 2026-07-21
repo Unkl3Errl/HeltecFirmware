@@ -10,13 +10,9 @@ struct themeFiles {
     String wifi = "";
     String ble = "";
     String ethernet = "";
-    String rf = "";
-    String rfid = "";
     String fm = "";
-    String ir = "";
     String files = "";
     String gps = "";
-    String nrf = "";
     String interpreter = "";
     String others = "";
     String clock = "";
@@ -36,13 +32,9 @@ struct themeInfo {
     bool wifi = false;
     bool ble = false;
     bool ethernet = false;
-    bool rf = false;
-    bool rfid = false;
     bool fm = false;
-    bool ir = false;
     bool files = false;
     bool gps = false;
-    bool nrf = false;
     bool interpreter = false;
     bool others = false;
     bool clock = false;

@@ -264,18 +264,8 @@ void ConfigMenu::devMenu() {
     while (true) {
         std::vector<Option> localOptions = {
             {"I2C Finder",      [this]() { find_i2c_addresses(); }                      },
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS)
-            {"CC1101 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
-            {"NRF24  Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
-#endif
 #if !defined(LITE_VERSION)
             {"LoRa Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS)
-            {"W5500 Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
-#endif
-#endif
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS)
-            {"SDCard Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
 #endif
             {"I2C Pins",        [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
             {"UART Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
@@ -318,14 +308,6 @@ void ConfigMenu::switchToUARTSerial() {
     if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
         sdcardSPI.end();
-    }
-
-    // Check and resolve CC1101/NRF24 pin conflicts
-    if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
-        bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.tx) ||
-        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
-        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
-        CC_NRF_SPI.end();
     }
 
     // Configure UART pins and switch serial output

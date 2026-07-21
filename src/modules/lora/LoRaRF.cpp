@@ -261,17 +261,6 @@ SPIClass *selectLoraSPIBus() {
     } else if (bruceConfigPins.SDCARD_bus.mosi == bruceConfigPins.LoRa_bus.mosi) {
         selectedSPI = &sdcardSPI;
         Serial.println("Using SDCard SPI for LoRa");
-    } else if (
-        bruceConfigPins.NRF24_bus.mosi == bruceConfigPins.LoRa_bus.mosi ||
-        bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.LoRa_bus.mosi
-    ) {
-        selectedSPI = &CC_NRF_SPI;
-        CC_NRF_SPI.begin(
-            (int8_t)bruceConfigPins.LoRa_bus.sck,
-            (int8_t)bruceConfigPins.LoRa_bus.miso,
-            (int8_t)bruceConfigPins.LoRa_bus.mosi
-        );
-        Serial.println("Using CC/NRF SPI for LoRa");
     } else {
         SPI.begin(
             bruceConfigPins.LoRa_bus.sck,

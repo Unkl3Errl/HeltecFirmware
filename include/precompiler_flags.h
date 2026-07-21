@@ -48,18 +48,6 @@
 #ifndef GROVE_SCL           // Pin to be used in I2C communications
   #define GROVE_SCL -1
 #endif
-#ifndef RXLED               // Default RX Infrared LED
-  #define RXLED GROVE_SCL
-#endif
-#ifndef TXLED                 // Default TX Infrared Led
-  #define TXLED GROVE_SDA
-#endif
-#ifndef LED_ON              // Infrared TXLED On state
-  #define LED_ON 1
-#endif
-#ifndef LED_OFF             // Infrared LED Off state
-  #define LED_OFF 0
-#endif
 #ifndef FP                  // Small Font -> Font Pequena
   #define FP 1
 #endif
@@ -168,64 +156,6 @@
   {"GPIO 31", 31}, {"GPIO 32", 32}, {"GPIO 33", 33}, {"GPIO 34", 34}, {"GPIO 35", 35}, {"GPIO 36", 36}, {"GPIO 37", 37}, {"GPIO 38", 38}, {"GPIO 39", 39}, {"GPIO 0",   0} \
 }
 #endif
-#ifdef ALLOW_ALL_GPIO_FOR_IR_RF
-    #undef IR_TX_PINS
-    #undef IR_RX_PINS
-    #undef RF_TX_PINS
-    #undef RF_RX_PINS
-
-    #define IR_TX_PINS GPIO_PIN_LIST
-    #define IR_RX_PINS GPIO_PIN_LIST
-    #define RF_TX_PINS GPIO_PIN_LIST
-    #define RF_RX_PINS GPIO_PIN_LIST
-#endif
-#if !defined(IR_TX_PINS) || !defined(IR_RX_PINS) || !defined(RF_TX_PINS) || !defined(RF_RX_PINS)
-    #define IR_TX_PINS GPIO_PIN_LIST
-    #define IR_RX_PINS GPIO_PIN_LIST
-    #define RF_TX_PINS GPIO_PIN_LIST
-    #define RF_RX_PINS GPIO_PIN_LIST
-#endif
-
-#ifndef NRF24_SCK_PIN
-#define NRF24_SCK_PIN -1
-#endif
-
-#ifndef NRF24_MISO_PIN
-#define NRF24_MISO_PIN -1
-#endif
-
-#ifndef NRF24_MOSI_PIN
-#define NRF24_MOSI_PIN -1
-#endif
-
-#ifndef NRF24_SS_PIN
-#define NRF24_SS_PIN -1
-#endif
-
-#ifndef NRF24_CE_PIN
-#define NRF24_CE_PIN -1
-#endif
-
-#ifndef CC1101_SCK_PIN
-#define CC1101_SCK_PIN -1
-#endif
-
-#ifndef CC1101_MISO_PIN
-#define CC1101_MISO_PIN -1
-#endif
-
-#ifndef CC1101_MOSI_PIN
-#define CC1101_MOSI_PIN -1
-#endif
-
-#ifndef CC1101_SS_PIN
-#define CC1101_SS_PIN -1
-#endif
-
-#ifndef CC1101_GDO0_PIN
-#define CC1101_GDO0_PIN -1
-#endif
-
 #ifndef W5500_SCK_PIN
 #define W5500_SCK_PIN -1
 #endif

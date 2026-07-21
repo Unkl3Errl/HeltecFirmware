@@ -41,17 +41,6 @@ static SPIClass *selectEthernetSPIBus() {
             (int8_t)bruceConfigPins.W5500_bus.cs
         );
         Serial.println("Using SDCard SPI for Ethernet");
-    } else if ((bruceConfigPins.W5500_bus.mosi == bruceConfigPins.NRF24_bus.mosi ||
-                bruceConfigPins.W5500_bus.mosi == bruceConfigPins.CC1101_bus.mosi) &&
-               bruceConfigPins.W5500_bus.mosi != GPIO_NUM_NC) {
-        selectedSPI = &CC_NRF_SPI;
-        CC_NRF_SPI.begin(
-            (int8_t)bruceConfigPins.W5500_bus.sck,
-            (int8_t)bruceConfigPins.W5500_bus.miso,
-            (int8_t)bruceConfigPins.W5500_bus.mosi,
-            (int8_t)bruceConfigPins.W5500_bus.cs
-        );
-        Serial.println("Using CC/NRF SPI for Ethernet");
     } else {
         SPI.begin(
             (int8_t)bruceConfigPins.W5500_bus.sck,

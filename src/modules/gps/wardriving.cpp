@@ -514,15 +514,13 @@ void Wardriving::create_filename() {
 
 void Wardriving::releasePins() {
     rxPinReleased = false;
-    if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
+    if (
 #if !defined(LITE_VERSION)
         bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
         bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
-        // T-Embed CC1101 and T-Display S3 Touch ties this pin to the NRF24 CS;
-        // switch it to input so the GPS UART can drive it.
+        // Release a shared peripheral pin so the GPS UART can drive it.
         pinMode(bruceConfigPins.gps_bus.rx, INPUT);
         rxPinReleased = true;
     }
@@ -548,8 +546,7 @@ void Wardriving::checkForAlert(const String &macAddress, const String &deviceTyp
 
 void Wardriving::restorePins() {
     if (rxPinReleased) {
-        if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-            bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
+        if (
 #if !defined(LITE_VERSION)
             bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
             bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
@@ -558,8 +555,7 @@ void Wardriving::restorePins() {
             // Restore the original board state after leaving the GPS app s
             // o the radio/other peripherals behave as expected
             pinMode(bruceConfigPins.gps_bus.rx, OUTPUT);
-            if (bruceConfigPins.gps_bus.rx == bruceConfigPins.CC1101_bus.cs ||
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.NRF24_bus.cs ||
+            if (
 #if !defined(LITE_VERSION)
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
@@ -569,7 +565,6 @@ void Wardriving::restorePins() {
                 digitalWrite(bruceConfigPins.gps_bus.rx, HIGH);
             } else {
                 // If it is conflicting with any other SPI pin, keep it LOW
-                // Avoids CC1101 Jamming and nRF24 radio to keep enabled
                 digitalWrite(bruceConfigPins.gps_bus.rx, LOW);
             }
         }

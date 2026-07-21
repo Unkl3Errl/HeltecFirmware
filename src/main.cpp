@@ -24,14 +24,6 @@ String startupAppJSInterpreterFile = "";
 
 MainMenu mainMenu;
 SPIClass sdcardSPI;
-#ifdef USE_HSPI_PORT
-#ifndef VSPI
-#define VSPI FSPI
-#endif
-SPIClass CC_NRF_SPI(VSPI);
-#else
-SPIClass CC_NRF_SPI(HSPI);
-#endif
 
 // Navigation Variables
 volatile bool NextPress = false;
@@ -153,7 +145,6 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #include "core/wifi/wifi_common.h"
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
 #include "modules/others/audio.h"                // for playAudioFile
-#include "modules/rf/rf_utils.h"                 // for initCC1101once
 #include <Wire.h>
 
 /*********************************************************************
@@ -190,24 +181,8 @@ void setup_gpio() {
     // init setup from /ports/*/interface.h
     _setup_gpio();
 
-    // Smoochiee v2 uses a AW9325 tro control GPS, MIC, Vibro and CC1101 RX/TX powerlines
+    // Initialize the optional board I/O expander when present.
     ioExpander.init(IO_EXPANDER_ADDRESS, &Wire);
-
-    // Do not pass GPIO_NUM_NC (-1/255) into the CC1101 library. Its setGDO0()
-    // path immediately calls pinMode(), even when no CC1101 is configured.
-    if (bruceConfigPins.CC1101_bus.cs != GPIO_NUM_NC && bruceConfigPins.CC1101_bus.io0 != GPIO_NUM_NC) {
-#if TFT_MOSI > 0
-        if (bruceConfigPins.CC1101_bus.mosi == (gpio_num_t)TFT_MOSI)
-            initCC1101once(&tft.getSPIinstance()); // (T_EMBED), CORE2 and others
-        else
-#endif
-            if (bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.SDCARD_bus.mosi)
-            initCC1101once(&sdcardSPI); // Devices that share the CC1101 and SD-card SPI bus
-                                        // share CC1101 pin with only SDCard
-        else initCC1101once(NULL);
-    }
-    // (ARDUINO_M5STICK_C_PLUS) || (ARDUINO_M5STICK_C_PLUS2) and others that doesn´t share SPI with
-    // other devices (need to change it when Bruce board comes to shore)
 }
 
 /*********************************************************************

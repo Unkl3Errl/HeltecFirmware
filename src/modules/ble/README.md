@@ -10,7 +10,6 @@ BLE Suite is a comprehensive Bluetooth Low Energy security testing framework for
 
 Hardware Integration
 
-· NRF24L01+ - BLE frequency jamming (3 jamming modes, jam & connect attacks)
 · FastPair Crypto - mbedTLS-based cryptographic operations (ECDH, AES-CCM, key generation)
 
 Core Components
@@ -80,8 +79,6 @@ MultiConnectionAttack
 
 · Connection flooding
 · Advertising spam
-· NRF24 jamming coordination
-· Jam & connect attacks
 
 Attack Menu (11 Main Items)
 
@@ -100,7 +97,7 @@ Protocol Suites
 Advanced Attacks
 
 1. Memory Corruption Suite - 6 options (FastPair memory corruption, state confusion, crypto overflow, handshake fault, rapid connection, all)
-2. DoS Attacks - 4 options (connection flood, advertising spam, jam & connect, protocol fuzzer)
+2. DoS Attacks - 3 options (connection flood, advertising spam, protocol fuzzer)
 3. Payload Delivery - 3 options (DuckyScript, PIN brute force, auth bypass)
 4. Testing Tools - 4 options (write access, audio control, fuzzer, HID test)
 
@@ -122,7 +119,6 @@ Dependencies
 · mbedTLS (ECDH, AES-CCM)
 · TFT_eSPI
 · SD card support
-· NRF24L01+ (optional)
 
 Flow
 

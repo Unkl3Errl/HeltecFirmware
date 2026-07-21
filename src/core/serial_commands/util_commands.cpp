@@ -147,35 +147,6 @@ uint32_t helpCallback(cmd *c) {
     serialDevice->println("  sniffer - Starts Raw Sniffer");
     serialDevice->println("\nWebUI Commands:");
     serialDevice->println("  webui      - WebUI Webserver start");
-    serialDevice->println("\nIR Commands:");
-    serialDevice->println("  ir rx <timeout>      - Read an IR signal and print the dump on serialDevice->");
-    serialDevice->println(
-        "  ir rx raw <timeout>  - Read an IR signal in RAW mode and print the dump on serialDevice->"
-    );
-    serialDevice->println("  ir tx <protocol> <address> <decoded_value>  - Send a custom decoded IR signal.");
-    serialDevice->println(
-        "  ir tx_from_file <ir file path> [hide default UI true/false] - Send an IR signal saved in "
-        "storage. Optionally hide the default UI."
-    );
-
-    serialDevice->println("\nRF Commands:");
-    serialDevice->println(
-        "  subghz rx <timeout>       - Read an RF signal and print the dump on serialDevice-> (alias: rf rx)"
-    );
-    serialDevice->println(
-        "  subghz rx raw <timeout>   - Read an RF signal in RAW mode and print the dump on serialDevice-> "
-        "(alias: "
-        "rf rx raw)"
-    );
-    serialDevice->println(
-        "  subghz tx <decoded_value> <frequency> <te> <count>  - Send a custom decoded RF signal. (alias: rf "
-        "tx)"
-    );
-    serialDevice->println(
-        "  subghz tx_from_file <sub file path> [hide default UI true/false] - Send an RF signal "
-        "saved in storage. Optionally hide the default UI."
-    );
-
     serialDevice->println("\nAudio Commands:");
     serialDevice->println("  music_player <audio file path>  - Play an audio file.");
     serialDevice->println("  tone <frequency> <duration>  - Play a single squarewave audio tone.");

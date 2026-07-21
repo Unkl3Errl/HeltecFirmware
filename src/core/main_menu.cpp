@@ -7,26 +7,13 @@ MainMenu::MainMenu() {
     _menuItems = {
         &wifiMenu,
         &bleMenu,
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS)
-        &rfMenu,
-        &nrf24Menu,
-#endif
 #if !defined(LITE_VERSION)
         &loraMenu,
 #endif
 #if defined(FM_SI4713) && !defined(LITE_VERSION)
         &fmMenu,
 #endif
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS)
-        &irMenu,
-#if !defined(LITE_VERSION)
-        &ethernetMenu,
-#endif
-#endif
         &gpsMenu,
-#if !defined(ARDUINO_HELTEC_WIFI_LORA_32_V4) || defined(HELTEC_ENABLE_EXTERNAL_HARDWARE_MENUS)
-        &rfidMenu,
-#endif
         &fileMenu,
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
