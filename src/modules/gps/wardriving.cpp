@@ -260,9 +260,9 @@ void Wardriving::scanWiFiBLE() {
 
     if (is_new_file) {
         file.println(
-            "WigleWifi-1.6,appRelease=v" + String(BRUCE_VERSION) + ",model=M5Stack GPS Unit,release=v" +
-            String(BRUCE_VERSION) +
-            ",device=ESP32 M5Stack,display=SPI TFT,board=ESP32 M5Stack,brand=Bruce,star=Sol,body=4,subBody=1"
+            "WigleWifi-1.6,appRelease=v" + String(BRUCE_VERSION) +
+            ",model=Heltec WiFi LoRa 32 V4,release=v" + String(BRUCE_VERSION) +
+            ",device=ESP32-S3,display=OLED,board=Heltec WiFi LoRa 32 V4,brand=Bruce,star=Sol,body=4,subBody=1"
         );
         file.println(
             "MAC,SSID,AuthMode,FirstSeen,Channel,Frequency,RSSI,CurrentLatitude,CurrentLongitude,"
@@ -516,7 +516,6 @@ void Wardriving::releasePins() {
     rxPinReleased = false;
     if (
 #if !defined(LITE_VERSION)
-        bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
         bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
@@ -548,7 +547,6 @@ void Wardriving::restorePins() {
     if (rxPinReleased) {
         if (
 #if !defined(LITE_VERSION)
-            bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
             bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
             bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
@@ -556,10 +554,6 @@ void Wardriving::restorePins() {
             // o the radio/other peripherals behave as expected
             pinMode(bruceConfigPins.gps_bus.rx, OUTPUT);
             if (
-#if !defined(LITE_VERSION)
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-#endif
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.SDCARD_bus.cs) {
                 // If it is conflicting to an SPI CS pin, keep it HIGH
                 digitalWrite(bruceConfigPins.gps_bus.rx, HIGH);

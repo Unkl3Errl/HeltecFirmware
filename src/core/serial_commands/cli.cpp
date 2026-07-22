@@ -5,9 +5,7 @@
 #include "gpio_commands.h"
 #include "interpreter_commands.h"
 #include "power_commands.h"
-#include "screen_commands.h"
 #include "settings_commands.h"
-#include "sound_commands.h"
 #include "storage_commands.h"
 #include "util_commands.h"
 #include "wifi_commands.h"
@@ -44,11 +42,5 @@ void SerialCli::setup() {
 #endif
 #ifndef LITE_VERSION
     createInterpreterCommands(&_cli);
-#endif
-#ifdef HAS_SCREEN
-    createScreenCommands(&_cli);
-#endif
-#if defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN)
-    createSoundCommands(&_cli);
 #endif
 }

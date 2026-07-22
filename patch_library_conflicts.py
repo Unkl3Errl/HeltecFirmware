@@ -1,4 +1,3 @@
-import os
 import re
 import glob
 
@@ -6,16 +5,6 @@ print("Patching library conflicts with ESP32 core...")
 
 # List of conflicts: (file_pattern, search_pattern, replace_pattern)
 conflicts = [
-    (
-        ".pio/libdeps/*/ESP8266SAM/src/render.c",
-        r'static void yield\(\)',
-        'static void sam_yield()'
-    ),
-    (
-        ".pio/libdeps/*/ESP8266SAM/src/render.c",
-        r'\byield\(\);',
-        'sam_yield();'
-    ),
     (
         ".pio/libdeps/*/JPEGDecoder/src/picojpeg.c",
         r'static uint8 init\(void\)',

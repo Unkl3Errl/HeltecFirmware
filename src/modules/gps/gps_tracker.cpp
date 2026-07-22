@@ -252,7 +252,6 @@ void GPSTracker::releasePins() {
     rxPinReleased = false;
     if (
 #if !defined(LITE_VERSION)
-        bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
         bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
@@ -266,7 +265,6 @@ void GPSTracker::restorePins() {
     if (rxPinReleased) {
         if (
 #if !defined(LITE_VERSION)
-            bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
             bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
             bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
@@ -274,10 +272,6 @@ void GPSTracker::restorePins() {
             // o the radio/other peripherals behave as expected
             pinMode(bruceConfigPins.gps_bus.rx, OUTPUT);
             if (
-#if !defined(LITE_VERSION)
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-#endif
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.SDCARD_bus.cs) {
                 // If it is conflicting to an SPI CS pin, keep it HIGH
                 digitalWrite(bruceConfigPins.gps_bus.rx, HIGH);

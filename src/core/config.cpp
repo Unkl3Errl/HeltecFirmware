@@ -1,10 +1,15 @@
 #include "config.h"
 #include "sd_functions.h"
 
+namespace {
+constexpr int CONFIG_SCHEMA_VERSION = 2;
+}
+
 JsonDocument BruceConfig::toJson() const {
     JsonDocument jsonDoc;
     JsonObject setting = jsonDoc.to<JsonObject>();
 
+    setting["schemaVersion"] = CONFIG_SCHEMA_VERSION;
     setting["priColor"] = String(priColor, HEX);
     setting["secColor"] = String(secColor, HEX);
     setting["bgColor"] = String(bgColor, HEX);
@@ -17,8 +22,6 @@ JsonDocument BruceConfig::toJson() const {
     setting["tmz"] = tmz;
     setting["dst"] = dst;
     setting["clock24hr"] = clock24hr;
-    setting["soundEnabled"] = soundEnabled;
-    setting["soundVolume"] = soundVolume;
     setting["wifiAtStartup"] = wifiAtStartup;
     setting["instantBoot"] = instantBoot;
     setting["keyboardLang"] = keyboardLang;
@@ -74,13 +77,6 @@ JsonDocument BruceConfig::toJson() const {
     JsonArray dm = setting["disabledMenus"].to<JsonArray>();
     for (int i = 0; i < disabledMenus.size(); i++) { dm.add(disabledMenus[i]); }
 
-    JsonArray qrArray = setting["qrCodes"].to<JsonArray>();
-    for (const auto &entry : qrCodes) {
-        JsonObject qrEntry = qrArray.add<JsonObject>();
-        qrEntry["menuName"] = entry.menuName;
-        qrEntry["content"] = entry.content;
-    }
-
     return jsonDoc;
 }
 
@@ -118,6 +114,8 @@ void BruceConfig::fromFile(bool checkFS) {
 
     JsonObject setting = jsonDoc.as<JsonObject>();
     int count = 0;
+
+    if ((setting["schemaVersion"] | 0) != CONFIG_SCHEMA_VERSION) count++;
 
     if (!setting["priColor"].isNull()) {
         priColor = strtoul(setting["priColor"], nullptr, 16);
@@ -183,18 +181,6 @@ void BruceConfig::fromFile(bool checkFS) {
     }
     if (!setting["clock24hr"].isNull()) {
         clock24hr = setting["clock24hr"].as<bool>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!setting["soundEnabled"].isNull()) {
-        soundEnabled = setting["soundEnabled"].as<int>();
-    } else {
-        count++;
-        log_e("Fail");
-    }
-    if (!setting["soundVolume"].isNull()) {
-        soundVolume = setting["soundVolume"].as<int>();
     } else {
         count++;
         log_e("Fail");
@@ -415,19 +401,6 @@ void BruceConfig::fromFile(bool checkFS) {
         log_e("Fail");
     }
 
-    if (!setting["qrCodes"].isNull()) {
-        qrCodes.clear();
-        JsonArray qrArray = setting["qrCodes"].as<JsonArray>();
-        for (JsonObject qrEntry : qrArray) {
-            String menuName = qrEntry["menuName"].as<String>();
-            String content = qrEntry["content"].as<String>();
-            qrCodes.push_back({menuName, content});
-        }
-    } else {
-        count++;
-        log_e("Fail to load qrCodes");
-    }
-
     validateConfig();
     if (count > 0) saveFile();
 
@@ -467,8 +440,6 @@ void BruceConfig::validateConfig() {
     validateDimmerValue();
     validateBrightValue();
     validateTmzValue();
-    validateSoundEnabledValue();
-    validateSoundVolumeValue();
     validateWifiAtStartupValue();
 #ifdef HAS_RGB_LED
     validateLedBrightValue();
@@ -537,26 +508,6 @@ void BruceConfig::setDST(bool value) {
 void BruceConfig::setClock24Hr(bool value) {
     clock24hr = value;
     saveFile();
-}
-
-void BruceConfig::setSoundEnabled(int value) {
-    soundEnabled = value;
-    validateSoundEnabledValue();
-    saveFile();
-}
-
-void BruceConfig::setSoundVolume(int value) {
-    soundVolume = value;
-    validateSoundVolumeValue();
-    saveFile();
-}
-
-void BruceConfig::validateSoundEnabledValue() {
-    if (soundEnabled > 1) soundEnabled = 1;
-}
-
-void BruceConfig::validateSoundVolumeValue() {
-    if (soundVolume > 100) soundVolume = 100;
 }
 
 void BruceConfig::setWifiAtStartup(int value) {
@@ -808,28 +759,6 @@ void BruceConfig::setBadUSBBLEShowOutput(bool value) {
 void BruceConfig::addDisabledMenu(String value) {
     // TODO: check if duplicate
     disabledMenus.push_back(value);
-    saveFile();
-}
-
-void BruceConfig::addQrCodeEntry(const String &menuName, const String &content) {
-    qrCodes.push_back({menuName, content});
-    saveFile();
-}
-
-void BruceConfig::removeQrCodeEntry(const String &menuName) {
-    size_t writeIndex = 0;
-
-    for (size_t readIndex = 0; readIndex < qrCodes.size(); ++readIndex) {
-        const QrCodeEntry &entry = qrCodes[readIndex];
-
-        if (entry.menuName != menuName) {
-            if (writeIndex != readIndex) { qrCodes[writeIndex] = std::move(qrCodes[readIndex]); }
-            ++writeIndex;
-        }
-    }
-
-    if (writeIndex < qrCodes.size()) { qrCodes.erase(qrCodes.begin() + writeIndex, qrCodes.end()); }
-
     saveFile();
 }
 

@@ -7,7 +7,6 @@
 #include "modules/bjs_interpreter/interpreter.h"
 #endif
 #include "modules/ble_api/ble_api.hpp"
-#include "modules/others/qrcode_menu.h"
 #include "mykeyboard.h"
 #include "powerSave.h"
 #include "sd_functions.h"
@@ -418,39 +417,6 @@ void setCustomUIColorSettingMenu(
         }
         return;
     }
-}
-
-/*********************************************************************
-**  Function: setSoundConfig - 01/2026 - Refactored "ConfigMenu" (this function manteined for
-* retrocompatibility)
-**  Enable or disable sound
-**********************************************************************/
-void setSoundConfig() {
-    options = {
-        {"Sound off", [=]() { bruceConfig.setSoundEnabled(0); }, bruceConfig.soundEnabled == 0},
-        {"Sound on",  [=]() { bruceConfig.setSoundEnabled(1); }, bruceConfig.soundEnabled == 1},
-    };
-    loopOptions(options, bruceConfig.soundEnabled);
-}
-
-/*********************************************************************
-**  Function: setSoundVolume
-**  Set sound volume
-**********************************************************************/
-void setSoundVolume() {
-    options = {
-        {"10%",  [=]() { bruceConfig.setSoundVolume(10); },  bruceConfig.soundVolume == 10 },
-        {"20%",  [=]() { bruceConfig.setSoundVolume(20); },  bruceConfig.soundVolume == 20 },
-        {"30%",  [=]() { bruceConfig.setSoundVolume(30); },  bruceConfig.soundVolume == 30 },
-        {"40%",  [=]() { bruceConfig.setSoundVolume(40); },  bruceConfig.soundVolume == 40 },
-        {"50%",  [=]() { bruceConfig.setSoundVolume(50); },  bruceConfig.soundVolume == 50 },
-        {"60%",  [=]() { bruceConfig.setSoundVolume(60); },  bruceConfig.soundVolume == 60 },
-        {"70%",  [=]() { bruceConfig.setSoundVolume(70); },  bruceConfig.soundVolume == 70 },
-        {"80%",  [=]() { bruceConfig.setSoundVolume(80); },  bruceConfig.soundVolume == 80 },
-        {"90%",  [=]() { bruceConfig.setSoundVolume(90); },  bruceConfig.soundVolume == 90 },
-        {"100%", [=]() { bruceConfig.setSoundVolume(100); }, bruceConfig.soundVolume == 100},
-    };
-    loopOptions(options, bruceConfig.soundVolume);
 }
 
 #ifdef HAS_RGB_LED

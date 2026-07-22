@@ -56,13 +56,12 @@ are compiled in. Attach the correct antenna before using the radio and configure
 a legal frequency and transmit power for your region.
 
 The onboard SX1262 is exposed through **LoRa**, not Bruce's generic **RF**
-category. The generic Sub-GHz/CC1101, NRF24, RFID/NFC, and infrared stacks are
-fully removed from source selection, serial commands, JavaScript bindings,
-configuration, bundled assets, and dependencies. Ethernet and iButton remain
-hidden because the board has neither device. SD, FM, microphone, and audio
-entries remain absent through their existing hardware checks. The TFT-only
-Megalodon application is also hidden because its renderer does not support the
-Heltec vector display backend.
+category. The generic Sub-GHz/CC1101, NRF24, RFID/NFC, infrared, external
+Ethernet, FM, iButton, audio, microphone, QR/TFT rendering, and Megalodon
+stacks are fully removed from source selection, serial commands, JavaScript
+bindings, configuration, bundled assets, and dependencies. SD remains only as
+the shared filesystem abstraction used by LittleFS-aware code; the Heltec
+target has no SD-card menu entry or configured SD pins.
 
 Leaving LoRa chat now puts the SX1262 to sleep, closes its dedicated SPI bus,
 and powers down the RF front end. Deep sleep also disables the RF front end,

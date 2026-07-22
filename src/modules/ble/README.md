@@ -117,7 +117,7 @@ Dependencies
 
 · NimBLE-Arduino 2.3.7
 · mbedTLS (ECDH, AES-CCM)
-· TFT_eSPI
+· Bruce display abstraction
 · SD card support
 
 Flow

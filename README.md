@@ -25,8 +25,10 @@ the attached GNSS module.
   RFID/NFC, and NRF24 implementations are removed from the source tree, serial
   CLI, JavaScript runtime, configuration schema, startup hooks, bundled assets,
   and dependencies. The onboard SX1262 remains available through LoRa.
-- Hardware-aware menus also omit Ethernet, iButton, audio, SD, and the TFT-only
-  Megalodon application when no usable onboard path exists.
+- External Ethernet, FM, iButton, audio, microphone, QR/TFT rendering, and
+  Megalodon implementations are removed rather than merely hidden. SD remains
+  represented only by the shared filesystem abstraction; this board uses
+  LittleFS for local storage.
 
 The complete pin map, endpoint contract, safety constraints, and target-board
 validation record are in [HELTEC_V4_PORT.md](HELTEC_V4_PORT.md).

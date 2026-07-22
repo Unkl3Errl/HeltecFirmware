@@ -2,26 +2,12 @@
 #include <globals.h>
 
 bool is_free_gpio_pin(int pin_no) {
-    // check if pin_no is usable for general GPIO
+    // Only expose the two Heltec V4 Grove pins. The board definition aliases many
+    // radio, OLED, GPS, battery, and control pins through the generic S3 target.
     std::vector<int> usable_pins = {GROVE_SDA, GROVE_SCL};
 
-#if defined(ARDUINO_M5STICK_C_PLUS2) || defined(ARDUINO_M5STICK_C_PLUS)
-    usable_pins.insert(usable_pins.end(), {25, 26, 32, 33, 0});
-#elif defined(ESP32S3DEVKITC1)
-    usable_pins.insert(
-        usable_pins.end(),
-        {
-            1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13,
-            14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, // GPIO1 to GPIO25
-            33,                                             // GPIO33
-            38, 39, 40, 41, 42,                             // GPIO38 to GPIO42
-            47, 48                                          // GPIO47 to GPIO48
-        }
-    );
-#endif
-
     for (int usable_pin : usable_pins)
-        if (pin_no == usable_pin) return true;
+        if (usable_pin >= 0 && pin_no == usable_pin) return true;
 
     return false;
 }

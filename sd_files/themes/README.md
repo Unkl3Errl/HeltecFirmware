@@ -16,9 +16,7 @@ The recommended height of the images is:
 
 | Device | Display size | Height |
 | --- | --- | --- |
-| T-Embed | 320x170 | 140px |
-| Compact display | 240x135 | 105px |
-| Core / CYD | 320x240 | 180 |
+| Heltec WebUI navigator | 240x135 | 105px |
 
 ## Theme file
 Theme settings are stored in a **.json** file, following this structure:
@@ -26,7 +24,6 @@ Theme settings are stored in a **.json** file, following this structure:
 {
   "wifi":"wifi.png",
   "ble":"ble.png",
-  "fm":"fm.png",
   "files":"files.png",
   "gps":"gps.png",
   "interpreter":"interpreter.png",
@@ -40,7 +37,6 @@ Theme settings are stored in a **.json** file, following this structure:
   "border":0,
   "label":0,
   "boot_img":"boot.gif",
-  "boot_sound":"boot.wav",
   "ledBright": 100,
   "ledColor": "960064",
   "ledEffect": 0,

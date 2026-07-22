@@ -10,9 +10,6 @@ MainMenu::MainMenu() {
 #if !defined(LITE_VERSION)
         &loraMenu,
 #endif
-#if defined(FM_SI4713) && !defined(LITE_VERSION)
-        &fmMenu,
-#endif
         &gpsMenu,
         &fileMenu,
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)

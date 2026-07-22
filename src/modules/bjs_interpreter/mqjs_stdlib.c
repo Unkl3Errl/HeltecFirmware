@@ -342,14 +342,6 @@ static const JSPropDef js_exports[] = {
 static const JSClassDef js_exports_obj =
     JS_OBJECT_DEF("Exports", js_exports);
 
-const JSPropDef js_audio[] = {
-    JS_CFUNC_DEF("playFile", 1, native_playAudioFile),
-    JS_CFUNC_DEF("tone", 3, native_tone),
-    JS_PROP_END,
-};
-
-const JSClassDef js_audio_obj = JS_OBJECT_DEF("Audio", js_audio);
-
 const JSPropDef js_keyboard[] = {
     JS_CFUNC_DEF("keyboard", 4, native_keyboard),
     JS_CFUNC_DEF("numKeyboard", 4, native_num_keyboard),
@@ -501,15 +493,6 @@ static const JSPropDef js_wifi[] = {
 };
 
 const JSClassDef js_wifi_obj = JS_OBJECT_DEF("WiFi", js_wifi);
-
-/* Mic module */
-static const JSPropDef js_mic[] = {
-    JS_CFUNC_DEF("recordWav", 2, native_micRecordWav),
-    JS_CFUNC_DEF("captureSamples", 1, native_micCaptureSamples),
-    JS_PROP_END,
-};
-
-const JSClassDef js_mic_obj = JS_OBJECT_DEF("Mic", js_mic);
 
 /* Runtime module */
 static const JSPropDef js_runtime[] = {
@@ -777,7 +760,6 @@ static const JSPropDef js_global_object[] = {
     JS_CFUNC_DEF("exit", 0, native_exit ),
 
     /* Modules */
-    JS_PROP_CLASS_DEF("audio", &js_audio_obj),
     JS_PROP_CLASS_DEF("badusb", &js_badusb_obj),
     JS_PROP_CLASS_DEF("device", &js_device_obj),
     JS_PROP_CLASS_DEF("display", &js_display_obj),
@@ -786,7 +768,6 @@ static const JSPropDef js_global_object[] = {
     JS_PROP_CLASS_DEF("i2c", &js_i2c_obj),
     JS_PROP_CLASS_DEF("keyboard", &js_keyboard_obj),
     JS_PROP_CLASS_DEF("notification", &js_notification_obj),
-    JS_PROP_CLASS_DEF("mic", &js_mic_obj),
     JS_PROP_CLASS_DEF("runtime", &js_runtime_obj),
     JS_PROP_CLASS_DEF("serial", &js_serial_obj),
     JS_PROP_CLASS_DEF("storage", &js_storage_obj),

@@ -238,18 +238,12 @@ struct box_t {
 // Retrieves the current keyStroke from InputHandler, resets it after use.
 // This function is used in loopTask to get the latest key press.
 keyStroke _getKeyPress() {
-#ifndef USE_TFT_eSPI_TOUCH
     vTaskSuspend(xHandle);
     keyStroke key = KeyStroke;
     KeyStroke.Clear();
     delay(10);
     vTaskResume(xHandle);
     return key;
-#else
-    keyStroke key = KeyStroke;
-    KeyStroke.Clear();
-    return key;
-#endif
 } // Returns a keyStroke that the keyboards won't recognize by default
 
 /*********************************************************************
@@ -823,10 +817,7 @@ String generalKeyboard(
         if (millis() - last_input_time > 250) { // INPUT DEBOUCING
             // waits at least 250ms before accepting another input, to prevent rapid involuntary repeats
 
-#if defined(HAS_TOUCH) // CYD, Core2, CoreS3
-#if defined(USE_TFT_eSPI_TOUCH)
-            check(AnyKeyPress);
-#endif
+#if defined(HAS_TOUCH)
             if (touchPoint.pressed) {
                 // If using touchscreen and buttons_strings, reset the navigation states to avoid inconsistent
                 // behavior, and reset the navigation coords to the OK button.
@@ -1181,9 +1172,8 @@ String generalKeyboard(
 #endif
 #endif
 
-#if defined(HAS_ENCODER) // T-Embed and T-LoRa-Pager and WaveSentry
-                         // WaveSentry has Touchscreen and Encoder, but the touchscreen is prioritized
-                         // if touchscreen is pressed, ignore the encoder input
+#if defined(HAS_ENCODER)
+            // If a touchscreen and encoder coexist, prioritize the touchscreen.
 #if !defined(HAS_TOUCH)
             LongPress = true;
 #endif

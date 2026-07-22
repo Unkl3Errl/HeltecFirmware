@@ -1105,14 +1105,11 @@ void sniffer_setup() {
             esp_wifi_set_promiscuous_rx_cb(sniffer);
         }
 
-#if defined(HAS_KEYBOARD) || defined(T_EMBED)
-        // T-Embed has a different btn for Escape, different from StickCs that uses Previous btn
         if (check(EscPress)) {
             returnToMenu = true;
             _pcap_file.close();
             break;
         }
-#endif
 
         if (check(SelPress)) { // pressed ok - show menu
             options = {
@@ -1273,7 +1270,7 @@ void sniffer_setup() {
             if (deauth_sent) {
                 // draw the message and start the timer
                 tft.setTextSize(1);  // optional, keep consistent with your UI
-                tft.setTextDatum(0); // optional: ensure text draws from top-left if using TFT_eSPI-like API
+                tft.setTextDatum(0); // ensure text draws from the top-left
                 tft.drawString("Deauth sent.", DEAUTH_MSG_X, DEAUTH_MSG_Y);
                 deauth_displayed = true;
                 deauth_display_ts = millis();

@@ -101,19 +101,6 @@ public:
 #endif
 
 #if !defined(LITE_VERSION)
-#if defined(W5500_SCK_PIN)
-    SPIPins W5500_bus = {
-        (gpio_num_t)W5500_SCK_PIN,
-        (gpio_num_t)W5500_MISO_PIN,
-        (gpio_num_t)W5500_MOSI_PIN,
-        (gpio_num_t)W5500_SS_PIN,
-        (gpio_num_t)W5500_INT_PIN,
-        (gpio_num_t)W5500_RST_PIN,
-    };
-#else
-    SPIPins W5500_bus;
-#endif
-
 #ifdef LORA_SCK
     SPIPins LoRa_bus = {
         (gpio_num_t)LORA_SCK,
@@ -138,9 +125,6 @@ public:
     // BLE
     String bleName = String("Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX));
 
-    // iButton Pin
-    int iButton = 0;
-
     // GPS
     int gpsBaudrate = 9600;
 
@@ -164,7 +148,6 @@ public:
     void setSDCardPins(SPIPins value);
 #if !defined(LITE_VERSION)
     void setLoRaPins(SPIPins value);
-    void setW5500Pins(SPIPins value);
 #endif
     void setSpiPins(SPIPins value);
     void setI2CPins(I2CPins value);
@@ -178,9 +161,6 @@ public:
     void validateRotationValue();
     // BLE
     void setBleName(const String name);
-
-    // iButton
-    void setiButtonPin(int value);
 
     // GPS
     void setGpsBaudrate(int value);

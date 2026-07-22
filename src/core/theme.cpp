@@ -43,8 +43,6 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
     ThemeEntry entries[] = {
         {"wifi",        &theme.wifi,        theme.paths.wifi       },
         {"ble",         &theme.ble,         theme.paths.ble        },
-        {"ethernet",    &theme.ethernet,    theme.paths.ethernet   },
-        {"fm",          &theme.fm,          theme.paths.fm         },
         {"files",       &theme.files,       theme.paths.files      },
         {"gps",         &theme.gps,         theme.paths.gps        },
         {"interpreter", &theme.interpreter, theme.paths.interpreter},
@@ -53,7 +51,6 @@ bool BruceTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigSett
         {"connect",     &theme.connect,     theme.paths.connect    },
         {"config",      &theme.config,      theme.paths.config     },
         {"boot_img",    &theme.boot_img,    theme.paths.boot_img   },
-        {"boot_sound",  &theme.boot_sound,  theme.paths.boot_sound },
         {"lora",        &theme.lora,        theme.paths.lora       }
     };
 

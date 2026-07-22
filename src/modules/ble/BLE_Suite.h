@@ -17,37 +17,6 @@
 #ifndef TFT_WHITE
 #define TFT_WHITE 0xFFFF
 #endif
-#ifndef TFT_BLACK
-#define TFT_BLACK 0x0000
-#endif
-#ifndef TFT_RED
-#define TFT_RED 0xF800
-#endif
-#ifndef TFT_GREEN
-#define TFT_GREEN 0x07E0
-#endif
-#ifndef TFT_BLUE
-#define TFT_BLUE 0x001F
-#endif
-#ifndef TFT_YELLOW
-#define TFT_YELLOW 0xFFE0
-#endif
-#ifndef TFT_CYAN
-#define TFT_CYAN 0x07FF
-#endif
-#ifndef TFT_MAGENTA
-#define TFT_MAGENTA 0xF81F
-#endif
-#ifndef TFT_ORANGE
-#define TFT_ORANGE 0xFDA0
-#endif
-#ifndef TFT_GRAY
-#define TFT_GRAY 0x8410
-#endif
-#ifndef TFT_DARKGREEN
-#define TFT_DARKGREEN 0x03E0
-#endif
-
 extern volatile int tftWidth;
 extern volatile int tftHeight;
 class tft_logger;
@@ -127,7 +96,7 @@ struct HIDConnectionResult {
     int attemptCount;
 };
 
-struct DuckyCommand {
+struct BLEDuckyCommand {
     String command;
     String parameter;
     int delay_ms;
@@ -295,13 +264,13 @@ public:
     bool parseLine(String line);
     bool loadFromSD(String filename);
     bool loadFromString(String script);
-    std::vector<DuckyCommand> getCommands();
+    std::vector<BLEDuckyCommand> getCommands();
     bool isLoaded();
     void clear();
     size_t getCommandCount();
 
 private:
-    std::vector<DuckyCommand> commands;
+    std::vector<BLEDuckyCommand> commands;
     bool scriptLoaded;
 };
 

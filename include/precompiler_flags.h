@@ -156,30 +156,6 @@
   {"GPIO 31", 31}, {"GPIO 32", 32}, {"GPIO 33", 33}, {"GPIO 34", 34}, {"GPIO 35", 35}, {"GPIO 36", 36}, {"GPIO 37", 37}, {"GPIO 38", 38}, {"GPIO 39", 39}, {"GPIO 0",   0} \
 }
 #endif
-#ifndef W5500_SCK_PIN
-#define W5500_SCK_PIN -1
-#endif
-
-#ifndef W5500_MISO_PIN
-#define W5500_MISO_PIN -1
-#endif
-
-#ifndef W5500_MOSI_PIN
-#define W5500_MOSI_PIN -1
-#endif
-
-#ifndef W5500_SS_PIN
-#define W5500_SS_PIN -1
-#endif
-
-#ifndef W5500_INT_PIN
-#define W5500_INT_PIN -1
-#endif
-
-#ifndef W5500_RST_PIN
-#define W5500_RST_PIN -1
-#endif
-
 // Temporary, delete after finish Interfaces
 
 #ifndef SMOOTH_FONT

@@ -16,7 +16,6 @@ private:
     // Submenus
     void displayUIMenu(void);
     void ledMenu(void);
-    void audioMenu(void);
     void systemMenu(void);
     void advancedMenu(void);
     void powerMenu(void);

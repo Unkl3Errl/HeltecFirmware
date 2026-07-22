@@ -586,7 +586,7 @@ int loopOptions(
             redraw = true;
 #else
             long _tmp = millis();
-#ifndef HAS_ENCODER // T-Embed doesn't need it
+#ifndef HAS_ENCODER
             LongPress = true;
             while (PrevPress && menuType != MENU_TYPE_MAIN) {
                 if (millis() - _tmp > 200)
@@ -1155,7 +1155,7 @@ void drawMfkey64Icon(int x, int y) {
 //  Draw a JPEG on the TFT, images will be cropped on the right/bottom sides if they do not fit
 // ####################################################################################################
 //  from:
-//  https://github.com/Bodmer/TFT_eSPI/blob/master/examples/Generic/ESP32_SDcard_jpeg/ESP32_SDcard_jpeg.ino
+//  Adapted from the JPEGDecoder display examples.
 //  This function assumes xpos,ypos is a valid screen coordinate. For convenience images that do not
 //  fit totally on the screen are cropped to the nearest MCU size and may leave right/bottom borders.
 void jpegRender(int xpos, int ypos) {
@@ -1329,8 +1329,7 @@ bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool ce
 // ####################################################################################################
 //  Draw a GIF on the TFT
 //  derived from
-//  https://github.com/bitbank2/AnimatedGIF/blob/master/examples/TFT_eSPI_memory/TFT_eSPI_memory.ino and
-//  https://github.com/bitbank2/AnimatedGIF/blob/master/examples/best_practices_example/best_practices_example.ino
+//  Adapted from the AnimatedGIF best-practices examples.
 // ####################################################################################################
 
 Gif::Gif() : gifPosition(0, 0) {}

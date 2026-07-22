@@ -37,19 +37,10 @@ extern RTC_TimeTypeDef _time;
 extern RTC_DateTypeDef _date;
 #endif
 
-// Declaração dos objetos TFT
-#if defined(HAS_SCREEN)
-#include <display/tft.h>
-#include <tftLogger.h>
-extern tft_logger tft;
-extern tft_sprite sprite;
-extern tft_sprite draw;
-#else
 #include <tftLogger.h>
 extern tft_logger tft;
 extern SerialDisplayClass &sprite;
 extern SerialDisplayClass &draw;
-#endif
 
 #ifdef USE_BQ27220_VIA_I2C
 #include <bq27220.h>
@@ -220,8 +211,6 @@ extern volatile int EncoderLedChange;
 
 extern TaskHandle_t xHandle;
 extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
-
-#ifndef USE_TFT_eSPI_TOUCH
     if (!btn) return false;
     vTaskSuspend(xHandle);
     if (resetButtonStatus) {
@@ -232,18 +221,6 @@ extern inline bool check(volatile bool &btn, bool resetButtonStatus = true) {
     delay(10);
     vTaskResume(xHandle);
     return true;
-#else
-
-    InputHandler();
-    if (!btn) return false;
-    btn = false;
-    AnyKeyPress = false;
-    SerialCmdPress = false;
-    return true;
-
-#endif
 }
-
-extern gpio_num_t mic_bclk_pin; // used to configure the microphone bit-clock pin
 
 #endif

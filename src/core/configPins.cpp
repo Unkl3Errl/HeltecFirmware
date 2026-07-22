@@ -4,7 +4,7 @@
 #include <globals.h>
 
 namespace {
-constexpr int PIN_CONFIG_SCHEMA_VERSION = 2;
+constexpr int PIN_CONFIG_SCHEMA_VERSION = 3;
 }
 
 String getMacAddress() {
@@ -51,15 +51,6 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         log_e("Fail");
     }
 
-    if (!root["iButton"].isNull()) {
-        int val = root["iButton"].as<int>();
-        if (val < GPIO_NUM_MAX) iButton = val;
-        else log_w("iButton pin not set");
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
     if (!root["gpsBaudrate"].isNull()) {
         gpsBaudrate = root["gpsBaudrate"].as<int>();
     } else {
@@ -79,13 +70,6 @@ void BruceConfigPins::fromJson(JsonObject obj) {
         log_e("Fail");
     }
 #if !defined(LITE_VERSION)
-    if (!root["W5500_Pins"].isNull()) {
-        W5500_bus.fromJson(root["W5500_Pins"].as<JsonObject>());
-    } else {
-        count++;
-        log_e("Fail");
-    }
-
     if (!root["LoRa_Pins"].isNull()) {
         SPIPins def = LoRa_bus;
         LoRa_bus.fromJson(root["LoRa_Pins"].as<JsonObject>());
@@ -133,15 +117,11 @@ void BruceConfigPins::toJson(JsonObject obj) const {
     root["rot"] = rotation;
     root["bleName"] = bleName;
     root["gpsBaudrate"] = gpsBaudrate;
-    root["iButton"] = iButton;
 
     JsonObject _SD = root["SDCard_Pins"].to<JsonObject>();
     SDCARD_bus.toJson(_SD);
 
 #if !defined(LITE_VERSION)
-    JsonObject _W5500 = root["W5500_Pins"].to<JsonObject>();
-    W5500_bus.toJson(_W5500);
-
     JsonObject _LoRa = root["LoRa_Pins"].to<JsonObject>();
     LoRa_bus.toJson(_LoRa);
 #endif
@@ -254,7 +234,6 @@ void BruceConfigPins::validateConfig() {
     validateGpsBaudrateValue();
 #if !defined(LITE_VERSION)
     validateSpiPins(LoRa_bus);
-    validateSpiPins(W5500_bus);
 #endif
     validateSpiPins(SDCARD_bus);
     validateI2CPins(i2c_bus);
@@ -265,11 +244,6 @@ void BruceConfigPins::validateConfig() {
 void BruceConfigPins::setLoRaPins(SPIPins value) {
     LoRa_bus = value;
     validateSpiPins(LoRa_bus);
-    saveFile();
-}
-void BruceConfigPins::setW5500Pins(SPIPins value) {
-    LoRa_bus = value;
-    validateSpiPins(W5500_bus);
     saveFile();
 }
 #endif
@@ -327,12 +301,6 @@ void BruceConfigPins::setBleName(String value) {
     saveFile();
 }
 
-void BruceConfigPins::setiButtonPin(int value) {
-    if (value < GPIO_NUM_MAX) {
-        iButton = value;
-        saveFile();
-    } else log_e("iButton: Gpio pin not set, incompatible with this device\n");
-}
 void BruceConfigPins::setGpsBaudrate(int value) {
     gpsBaudrate = value;
     validateGpsBaudrateValue();

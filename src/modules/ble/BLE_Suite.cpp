@@ -1574,7 +1574,7 @@ bool DuckyScriptEngine::parseLine(String line) {
     line.trim();
     if (line.length() == 0 || line.startsWith("//") || line.startsWith("REM")) return true;
 
-    DuckyCommand cmd;
+    BLEDuckyCommand cmd;
     if (line.startsWith("DELAY ")) {
         cmd.command = "DELAY";
         cmd.parameter = line.substring(6);
@@ -1685,7 +1685,7 @@ bool DuckyScriptEngine::loadFromString(String script) {
     return true;
 }
 
-std::vector<DuckyCommand> DuckyScriptEngine::getCommands() { return commands; }
+std::vector<BLEDuckyCommand> DuckyScriptEngine::getCommands() { return commands; }
 bool DuckyScriptEngine::isLoaded() { return scriptLoaded; }
 void DuckyScriptEngine::clear() {
     commands.clear();
@@ -1884,12 +1884,12 @@ bool HIDDuckyService::executeDuckyScript(NimBLEAddress target) {
     }
 
     showAttackProgress("Executing Ducky Script...", TFT_BLUE);
-    std::vector<DuckyCommand> commands = duckyEngine.getCommands();
+    std::vector<BLEDuckyCommand> commands = duckyEngine.getCommands();
     bool success = true;
     int currentDelay = defaultDelay;
 
     for (size_t i = 0; i < commands.size(); i++) {
-        DuckyCommand cmd = commands[i];
+        BLEDuckyCommand cmd = commands[i];
         if (i % 5 == 0)
             showAttackProgress(
                 String("Executing command " + String(i + 1) + "/" + String(commands.size())).c_str(), TFT_BLUE
@@ -2001,12 +2001,12 @@ bool HIDDuckyService::forceInjectDuckyScript(
     }
 
     showAttackProgress("Executing Ducky Script...", TFT_BLUE);
-    std::vector<DuckyCommand> commands = duckyEngine.getCommands();
+    std::vector<BLEDuckyCommand> commands = duckyEngine.getCommands();
     bool success = true;
     int currentDelay = defaultDelay;
 
     for (size_t i = 0; i < commands.size(); i++) {
-        DuckyCommand cmd = commands[i];
+        BLEDuckyCommand cmd = commands[i];
 
         if (cmd.command == "DELAY") delay(cmd.delay_ms);
         else if (cmd.command == "DEFAULT_DELAY") currentDelay = cmd.delay_ms;
@@ -3838,18 +3838,18 @@ static bool welcomeShown = false;
 void showWelcomeScreen() {
     if (welcomeShown) return;
 
-    tft.fillScreen(TFT_GRAY);
+    tft.fillScreen(TFT_DARKGREY);
     tft.setTextSize(3);
-    tft.setTextColor(TFT_PURPLE, TFT_GRAY);
+    tft.setTextColor(TFT_PURPLE, TFT_DARKGREY);
     tft.setCursor((tftWidth - tft.textWidth("BRUCE")) / 2, 40);
     tft.print("BRUCE");
 
-    tft.setTextColor(TFT_BLUE, TFT_GRAY);
+    tft.setTextColor(TFT_BLUE, TFT_DARKGREY);
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 90);
     tft.print("BLE SUITE");
 
-    tft.setTextColor(TFT_GREEN, TFT_GRAY);
+    tft.setTextColor(TFT_GREEN, TFT_DARKGREY);
     tft.setTextSize(1);
     tft.setCursor((tftWidth - tft.textWidth("v2.0b")) / 2, 130);
     tft.print("v2.0b");

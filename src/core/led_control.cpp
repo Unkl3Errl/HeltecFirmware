@@ -312,7 +312,7 @@ void beginLed() {
      */
     // -- RMT configuration for transmission
 
-    // These configurations made some T-Embed variants stop working.
+    // Keep LED shutdown behavior conservative across supported configurations.
     // Commented to test if with the FASTLED_RMT_MAX_CHANNELS 1 was sufficient for the other devices to
     // work LED and RF Spectrum and RAW capture and it is working well without it for now.. So I'll keep
     // the code below for the case we find some issue and need to rollback

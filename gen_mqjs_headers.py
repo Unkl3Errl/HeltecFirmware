@@ -36,7 +36,6 @@ HOST_CC = "gcc"
 INCLUDES = [
     'user_classes_js',
     'buffer_js',
-    'audio_js',
     'badusb_js',
     'ble_js',
     'device_js',
@@ -49,7 +48,6 @@ INCLUDES = [
     'led_js',
     'math_js',
     'menu_js',
-    'mic_js',
     'notification_js',
     'runtime_js',
     'serial_js',

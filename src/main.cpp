@@ -70,9 +70,7 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             touchPoint.Clear();
-#ifndef USE_TFT_eSPI_TOUCH
             InputHandler();
-#endif
             timer = millis();
         }
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -144,7 +142,6 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
-#include "modules/others/audio.h"                // for playAudioFile
 #include <Wire.h>
 
 /*********************************************************************
@@ -361,32 +358,6 @@ void init_led() {
 }
 
 /*********************************************************************
- **  Function: startup_sound
- **  Play sound or tone depending on device hardware
- *********************************************************************/
-void startup_sound() {
-    if (bruceConfig.soundEnabled == 0) return; // if sound is disabled, do not play sound
-#if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN)
-    // Bip M5 just because it can. Does not bip if splashscreen is bypassed
-    _tone(5000, 50);
-    delay(200);
-    _tone(5000, 50);
-    /*  2fix: menu infinite loop */
-#elif defined(HAS_NS4168_SPKR)
-    // play a boot sound
-    if (bruceConfig.theme.boot_sound) {
-        playAudioFile(bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.boot_sound));
-    } else if (SD.exists("/boot.wav")) {
-        playAudioFile(&SD, "/boot.wav");
-    } else if (LittleFS.exists("/boot.wav")) {
-        playAudioFile(&LittleFS, "/boot.wav");
-    }
-#endif
-#endif
-}
-
-/*********************************************************************
  **  Function: setup
  **  Where the devices are started and variables set
  *********************************************************************/
@@ -463,7 +434,7 @@ void setup() {
     esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
     esp_wifi_set_country(&country);
 
-    // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
+    // Complete board-specific GPIO setup after the display and storage setup.
     _post_setup_gpio();
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     extern void heltecFieldLoggerBegin();
@@ -475,7 +446,6 @@ void setup() {
     setBrightness(bruceConfig.bright, false);
     // end of post gpio begin
 
-    // #ifndef USE_TFT_eSPI_TOUCH
     // This task keeps running all the time, will never stop
     xTaskCreate(
         taskInputHandler,              // Task function
@@ -485,12 +455,10 @@ void setup() {
         2,                             // Task priority (0 to 3), loopTask has priority 2.
         &xHandle                       // Task handle (not used)
     );
-    // #endif
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {
         boot_screen_anim();
-        startup_sound();
     }
     if (bruceConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");
