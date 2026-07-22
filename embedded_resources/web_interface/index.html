@@ -133,16 +133,38 @@
           </div>
           <div class="hardware-module hardware-field-log">
             <div class="hardware-module-title">
+              <strong>Marauder passive Wi-Fi survey</strong>
+              <span id="heltec-wifi-state">Idle</span>
+            </div>
+            <div id="heltec-wifi-value" class="hardware-value">No survey has completed</div>
+            <div id="heltec-wifi-detail" class="hardware-detail">
+              Passive all-channel discovery shares Bruce's Wi-Fi stack and does not transmit test frames.
+            </div>
+            <div>
+              <button id="heltec-wifi-scan" class="btn-action">Scan networks</button>
+              <button id="heltec-wifi-clear" class="btn-action">Clear results</button>
+            </div>
+            <div class="hardware-history">
+              <div class="hardware-history-head">
+                <strong>Discovered access points</strong>
+                <span id="heltec-wifi-summary" class="hardware-detail">0 retained</span>
+              </div>
+              <div id="heltec-wifi-results" class="hardware-history-list"></div>
+            </div>
+          </div>
+          <div class="hardware-module hardware-field-log">
+            <div class="hardware-module-title">
               <strong>Reset-resistant field log</strong>
               <span id="heltec-fieldlog-state">Stopped</span>
             </div>
             <div id="heltec-fieldlog-value" class="hardware-value">No active session</div>
             <div id="heltec-fieldlog-detail" class="hardware-detail">
-              GPS fixes and passive BLE observations are appended to LittleFS as they arrive.
+              GPS fixes plus passive BLE and Marauder Wi-Fi observations are appended to LittleFS.
             </div>
             <div class="hardware-field-options">
               <label><input id="heltec-fieldlog-gps" type="checkbox" checked /> GPS fixes</label>
               <label><input id="heltec-fieldlog-ble" type="checkbox" checked /> Passive BLE</label>
+              <label><input id="heltec-fieldlog-wifi" type="checkbox" /> Passive Wi-Fi</label>
               <label><input id="heltec-fieldlog-resume" type="checkbox" checked /> Resume after reset</label>
             </div>
             <button id="heltec-fieldlog-toggle" class="btn-action">Start field log</button>

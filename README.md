@@ -1,20 +1,27 @@
-# Bruce for Heltec WiFi LoRa 32 V4
+# Unified Bruce + Marauder for Heltec WiFi LoRa 32 V4
 
 This repository is a Heltec WiFi LoRa 32 V4-only firmware project derived from
 [BruceDevices/firmware](https://github.com/BruceDevices/firmware). Its build,
 board metadata, automated checks, and documentation target only the ESP32-S3
 Heltec V4 with 16 MB flash, 2 MB PSRAM, onboard SSD1306 OLED, SX1262 radio, and
-the attached GNSS module.
+the attached GNSS module. A bounded, passive Wi-Fi survey adapted from
+[ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) is integrated
+into Bruce's existing display, WebUI, radio, storage, and authentication
+lifecycles instead of running a second firmware stack.
 
 ## Heltec V4 integration
 
-- Six-page OLED status dashboard with PRG-button navigation, controls, and
+- Seven-page OLED status dashboard with PRG-button navigation, controls, and
   deep-sleep entry.
+- Receive-only Marauder Wi-Fi survey with a 64-network device list, manual
+  scanning, and reset-resistant automatic field surveys that preserve the
+  BruceNet access point.
 - Authenticated WebUI hardware, network, memory, GPS, and LoRa diagnostics.
 - Live GNSS monitoring with a bounded 16-fix track and JSON/GPX export.
-- Reset-resistant LittleFS field logging that appends GPS fixes and passive BLE
-  observations as NDJSON, resumes after a reset when enabled, and exposes
-  authenticated status and downloads in the WebUI.
+- Reset-resistant LittleFS field logging that appends onboard or Android GPS
+  fixes plus passive BLE and Wi-Fi observations as NDJSON, resumes after a
+  reset when enabled, and exposes authenticated status and downloads in the
+  WebUI and Android app.
 - SX1262 receive control with an eight-packet history and JSON export.
 - Constrained US915 WebUI transmission: 902–928 MHz, fixed 2 dBm, printable
   payloads up to 64 bytes, per-packet confirmation, and cooldown.
@@ -90,4 +97,5 @@ every packet.
 
 Bruce and this derivative are distributed under the GNU Affero General Public
 License v3.0. Upstream authors and contributors retain their respective
-copyrights and attribution.
+copyrights and attribution. The incorporated ESP32 Marauder survey behavior is
+adapted from MIT-licensed upstream code and retains attribution in its source.

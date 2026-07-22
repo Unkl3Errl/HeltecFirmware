@@ -28,6 +28,7 @@ KNOWN_TYPES = {
     "session_stop",
     "gps",
     "ble",
+    "wifi",
 }
 
 
@@ -70,6 +71,16 @@ def validate_record(record: Any, path: Path, line_number: int, session: int, seg
             isinstance(longitude, (int, float)) and not isinstance(longitude, bool) and -180 <= longitude <= 180,
             f"{label}: invalid GPS longitude",
         )
+        source = record.get("source", "onboard")
+        require(source in {"onboard", "android"}, f"{label}: invalid GPS source")
+        accuracy = record.get("accuracyMeters")
+        if accuracy is not None:
+            require(
+                isinstance(accuracy, (int, float))
+                and not isinstance(accuracy, bool)
+                and 0 <= accuracy <= 100000,
+                f"{label}: invalid GPS accuracy",
+            )
     elif record["type"] == "ble":
         address = record.get("address")
         require(isinstance(address, str) and BLE_ADDRESS.fullmatch(address) is not None, f"{label}: invalid BLE address")
@@ -81,6 +92,21 @@ def validate_record(record: Any, path: Path, line_number: int, session: int, seg
         location = record.get("location")
         if location is not None:
             require(isinstance(location, dict), f"{label}: BLE location is not an object")
+            require(-90 <= float(location.get("latitude")) <= 90, f"{label}: invalid associated latitude")
+            require(-180 <= float(location.get("longitude")) <= 180, f"{label}: invalid associated longitude")
+    elif record["type"] == "wifi":
+        bssid = record.get("bssid")
+        require(isinstance(bssid, str) and BLE_ADDRESS.fullmatch(bssid) is not None, f"{label}: invalid WiFi BSSID")
+        rssi = record.get("rssiDbm")
+        require(
+            isinstance(rssi, int) and -127 <= rssi <= 20,
+            f"{label}: invalid WiFi RSSI",
+        )
+        channel = record.get("channel")
+        require(isinstance(channel, int) and 1 <= channel <= 14, f"{label}: invalid WiFi channel")
+        location = record.get("location")
+        if location is not None:
+            require(isinstance(location, dict), f"{label}: WiFi location is not an object")
             require(-90 <= float(location.get("latitude")) <= 90, f"{label}: invalid associated latitude")
             require(-180 <= float(location.get("longitude")) <= 180, f"{label}: invalid associated longitude")
 
@@ -148,8 +174,12 @@ def run_self_test() -> None:
                 "type": "gps",
                 "segment": 0,
                 "uptimeMs": 200,
+                "source": "android",
+                "provider": "gps",
+                "sourceUnixTimeMs": 1784682000000,
                 "latitude": 41.88,
                 "longitude": -87.63,
+                "accuracyMeters": 4.5,
             },
         ]
         first.write_bytes(("\n".join(json.dumps(record) for record in records) + "\n{\"formatVersion\":1").encode())
@@ -172,11 +202,25 @@ def run_self_test() -> None:
                 "address": "00:11:22:33:44:55",
                 "rssiDbm": -60,
             },
+            common
+            | {
+                "type": "wifi",
+                "segment": 1,
+                "bootCount": 2,
+                "uptimeMs": 150,
+                "bssid": "AA:BB:CC:DD:EE:FF",
+                "ssid": "AuthorizedLab",
+                "authentication": "WPA2_PSK",
+                "rssiDbm": -48,
+                "channel": 6,
+                "hidden": False,
+                "location": {"latitude": 41.88, "longitude": -87.63, "ageMs": 50},
+            },
             common | {"type": "session_stop", "segment": 1, "bootCount": 2, "uptimeMs": 200},
         ]
         second.write_text("\n".join(json.dumps(record) for record in second_records) + "\n")
         results = validate_files(directory.glob("*.ndjson"))
-        require(sum(len(result.records) for result in results) == 5, "self-test record count mismatch")
+        require(sum(len(result.records) for result in results) == 6, "self-test record count mismatch")
         require(results[0].interrupted_tail_bytes > 0, "self-test did not detect interrupted tail")
     print("PASS field-log validator self-test")
 

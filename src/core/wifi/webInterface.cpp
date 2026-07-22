@@ -13,12 +13,16 @@
 #include "esp_task_wdt.h"
 #include "webFiles.h"
 #include <MD5Builder.h>
+#include <cerrno>
+#include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <esp32-hal-psram.h>
 #include <esp_heap_caps.h>
 #include <globals.h>
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
 #include "field_logger.h"
+#include "marauder_wifi.h"
 #endif
 
 File uploadFile;
@@ -42,6 +46,27 @@ static void delayedWebUiRestart(void *) {
 
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
 static SemaphoreHandle_t heltecApiMutex = nullptr;
+static uint32_t heltecPhoneGpsSequence = 0;
+
+static bool parseHeltecFiniteNumber(const String &text, double &output) {
+    String trimmed = text;
+    trimmed.trim();
+    if (trimmed.length() == 0) return false;
+    errno = 0;
+    char *end = nullptr;
+    output = strtod(trimmed.c_str(), &end);
+    return errno != ERANGE && end != trimmed.c_str() && end && *end == '\0' && std::isfinite(output);
+}
+
+static bool parseHeltecUnsigned64(const String &text, uint64_t &output) {
+    String trimmed = text;
+    trimmed.trim();
+    if (trimmed.length() == 0 || trimmed[0] == '-') return false;
+    errno = 0;
+    char *end = nullptr;
+    output = strtoull(trimmed.c_str(), &end, 10);
+    return errno != ERANGE && end != trimmed.c_str() && end && *end == '\0';
+}
 
 #if !defined(LITE_VERSION)
 bool heltecV4ToggleLoraReceiver(float frequencyMHz) {
@@ -469,6 +494,134 @@ void configureWebServer() {
         request->send(200, "application/json", heltecV4HardwareStatusJson());
     });
 
+    server->on("/api/heltec/capabilities", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        request->send(200, "application/json", heltecUnifiedCapabilitiesJson());
+    });
+
+    // Register the specific results path before /wifi because this server also
+    // considers prefix matches when dispatching routes.
+    server->on("/api/heltec/wifi/results", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        request->send(200, "application/json", heltecMarauderWifiResultsJson());
+    });
+
+    server->on("/api/heltec/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        request->send(200, "application/json", heltecMarauderWifiStatusJson());
+    });
+
+    server->on("/api/heltec/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("action", true)) {
+            request->send(400, "application/json", "{\"error\":\"missing action\"}");
+            return;
+        }
+        const String action = request->getParam("action", true)->value();
+        bool ok = false;
+        int status = 200;
+        if (action == "scan") {
+            ok = heltecMarauderWifiRequestScan();
+            status = ok ? 202 : 409;
+        } else if (action == "clear") {
+            ok = heltecMarauderWifiClearResults();
+            status = ok ? 200 : 409;
+        } else {
+            request->send(400, "application/json", "{\"error\":\"invalid action\"}");
+            return;
+        }
+        request->send(status, "application/json", heltecMarauderWifiStatusJson());
+    });
+
+    // Register phone-assisted GPS before the generic field-log route. The
+    // endpoint only appends authenticated location fixes to an already-active
+    // GPS field-log session; it cannot start a logger or radio service.
+    server->on("/api/heltec/fieldlog/phone-gps", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (!request->hasParam("latitude", true) || !request->hasParam("longitude", true)) {
+            request->send(400, "application/json", "{\"error\":\"latitude and longitude are required\"}");
+            return;
+        }
+
+        double latitude = 0.0;
+        double longitude = 0.0;
+        if (
+            !parseHeltecFiniteNumber(request->getParam("latitude", true)->value(), latitude) ||
+            !parseHeltecFiniteNumber(request->getParam("longitude", true)->value(), longitude) ||
+            latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0
+        ) {
+            request->send(400, "application/json", "{\"error\":\"invalid coordinates\"}");
+            return;
+        }
+
+        HeltecFieldGpsRecord record;
+        record.source = "android";
+        record.provider = request->hasParam("provider", true)
+                              ? request->getParam("provider", true)->value().substring(0, 16)
+                              : "phone";
+        record.uptimeMs = millis();
+        record.sequence = __atomic_add_fetch(&heltecPhoneGpsSequence, 1, __ATOMIC_RELAXED);
+        record.latitude = latitude;
+        record.longitude = longitude;
+
+        double optionalValue = 0.0;
+        if (request->hasParam("accuracyMeters", true)) {
+            if (
+                !parseHeltecFiniteNumber(
+                    request->getParam("accuracyMeters", true)->value(), optionalValue
+                ) ||
+                optionalValue < 0.0 || optionalValue > 100000.0
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid accuracy\"}");
+                return;
+            }
+            record.accuracyMeters = optionalValue;
+        }
+        if (request->hasParam("altitudeMeters", true)) {
+            if (
+                !parseHeltecFiniteNumber(
+                    request->getParam("altitudeMeters", true)->value(), optionalValue
+                ) ||
+                optionalValue < -1000.0 || optionalValue > 100000.0
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid altitude\"}");
+                return;
+            }
+            record.altitudeMeters = optionalValue;
+        }
+        if (request->hasParam("speedKmph", true)) {
+            if (
+                !parseHeltecFiniteNumber(request->getParam("speedKmph", true)->value(), optionalValue) ||
+                optionalValue < 0.0 || optionalValue > 2000.0
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid speed\"}");
+                return;
+            }
+            record.speedKmph = optionalValue;
+        }
+        if (request->hasParam("sourceUnixTimeMs", true)) {
+            uint64_t sourceTime = 0;
+            if (
+                !parseHeltecUnsigned64(request->getParam("sourceUnixTimeMs", true)->value(), sourceTime) ||
+                sourceTime < 946684800000ULL || sourceTime > 4102444800000ULL
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid source time\"}");
+                return;
+            }
+            record.sourceUnixTimeMs = sourceTime;
+        }
+
+        if (!heltecFieldLoggerRecordGps(record)) {
+            request->send(
+                409,
+                "application/json",
+                "{\"error\":\"active field log with GPS enabled is required\"}"
+            );
+            return;
+        }
+        request->send(200, "application/json", heltecFieldLoggerStatusJson());
+    });
+
     // Register specific paths before /fieldlog; AsyncWebServer also matches path prefixes.
     server->on("/api/heltec/fieldlog/files", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (!checkUserWebAuth(request)) return;
@@ -512,7 +665,10 @@ void configureWebServer() {
             const bool autoResume = !request->hasParam("autoResume", true) ||
                                     request->getParam("autoResume", true)->value() == "true" ||
                                     request->getParam("autoResume", true)->value() == "1";
-            ok = heltecFieldLoggerStart(gps, ble, autoResume);
+            const bool wifi = request->hasParam("wifi", true) &&
+                              (request->getParam("wifi", true)->value() == "true" ||
+                               request->getParam("wifi", true)->value() == "1");
+            ok = heltecFieldLoggerStart(gps, ble, autoResume, wifi);
         } else if (action == "stop") {
             ok = heltecFieldLoggerStop();
         } else {

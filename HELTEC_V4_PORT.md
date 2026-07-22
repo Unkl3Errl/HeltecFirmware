@@ -25,16 +25,21 @@ upstream branch on July 18, 2026.
   station scan)
 - Authenticated WebUI hardware panel with live GPS monitoring and receive-only
   LoRa controls plus a constrained transmitter
+- Unified, receive-only Marauder Wi-Fi survey with an asynchronous 64-network
+  result list. Automatic scans begin only after a 30-second boot grace, run at
+  most every 15 seconds while Wi-Fi field logging is active, and leave the
+  BruceNet radio in stable AP+STA mode after the first survey.
 - Bounded GPS fix track with JSON and GPX downloads
 - Bounded recent LoRa receive history with signal metrics and JSON download
-- Reset-resistant LittleFS field logger for incremental GPS fixes and passive
-  BLE observations, with optional automatic resume after a reset
-- OLED boot screen plus network, login, live GPS, live LoRa RX, and hardware
-  status pages plus a field-log status page
-- PRG button cycles through all six OLED dashboard pages
+- Reset-resistant LittleFS field logger for incremental onboard/Android GPS
+  fixes and passive BLE/Wi-Fi observations, with optional automatic resume
+  after a reset
+- OLED boot screen plus network, login, live GPS, live LoRa RX, passive Wi-Fi,
+  hardware, and field-log status pages
+- PRG button cycles through all seven OLED dashboard pages
 - Holding PRG on the GPS or LoRa page toggles GPS monitoring or receive-only
   LoRa listening
-- Holding PRG on the field-log page starts or stops a GPS+BLE log with
+- Holding PRG on the field-log page starts or stops a GPS+BLE+Wi-Fi log with
   automatic reset resume enabled
 - Holding PRG for two seconds on the hardware page enters deep sleep after the
   button is released; pressing PRG wakes the board
@@ -43,8 +48,8 @@ upstream branch on July 18, 2026.
 
 The onboard 128x64 SSD1306 OLED shows boot progress, WebUI connection details,
 live GPS state and counters, receive-only LoRa state, packet count, frequency,
-last-packet RSSI/SNR and a payload preview, passive hardware diagnostics, and
-field-log session/counter status.
+last-packet RSSI/SNR and a payload preview, passive Wi-Fi survey state, passive
+hardware diagnostics, and field-log session/counter status.
 Short PRG presses cycle pages; a 0.9-second
 hold on the GPS, LoRa, or field-log page toggles that service. Bruce's complete graphical
 menu remains in the WebUI because it targets color TFT drivers and multi-button
@@ -109,8 +114,13 @@ browser:
   sends 1–64 printable ASCII bytes at the active frequency with fixed 2 dBm
   output, requires a browser confirmation for every packet, and enforces a
   five-second cooldown before another WebUI transmission.
+- **Marauder passive Wi-Fi survey** performs receive-only infrastructure scans
+  and retains up to 64 networks with BSSID, SSID, authentication, RSSI, channel,
+  and hidden-network state. Bruce owns the AP and WebUI throughout: a scan may
+  add the idle STA interface but never tears the radio back down to AP-only.
 - **Reset-resistant field log** independently enables GPS fixes, passive BLE
-  observations, and automatic resume. Each observation is serialized as one
+  observations, passive Wi-Fi observations, and automatic resume. Each
+  observation is serialized as one
   newline-terminated JSON object, flushed, and closed immediately. A reset can
   therefore affect only the record being written. If the prior segment lacks a
   final newline, boot preserves it, starts the next numbered segment, writes a
@@ -119,6 +129,10 @@ browser:
   is recorded at most once per minute, and a GPS position is attached when a fix
   is no more than 30 seconds old. Logging stops before LittleFS free space falls
   below the 256 KiB reserve.
+- **Android GPS assist** accepts authenticated fixes only while an active field
+  log has GPS enabled. Records identify `source: "android"`, provider, source
+  time, and optional accuracy, altitude, and speed so consumers can distinguish
+  them from onboard GNSS fixes.
 - Saved `session-NNNNNN-SSS.ndjson` segments are listed and downloaded through
   authenticated routes. A segment marked **interrupted tail** contains valid
   newline-delimited records followed by the preserved partial write; consumers
@@ -127,14 +141,18 @@ browser:
   addresses, and broadcast device names. The WebUI does not offer deletion, so
   stored evidence is never removed by an accidental control click.
 
-These controls require the normal WebUI session cookie. Their endpoints are
+These controls require the normal WebUI session cookie. Unified discovery uses
+`GET /api/heltec/capabilities`, `GET /api/heltec/wifi`,
+`GET /api/heltec/wifi/results`, and `POST /api/heltec/wifi`. Android-assisted
+location uses `POST /api/heltec/fieldlog/phone-gps`. The remaining endpoints are
 `POST /api/heltec/gps`, `GET|POST /api/heltec/gps/history`,
 `GET|POST /api/heltec/lora`,
 `GET|POST /api/heltec/lora/history`, `POST /api/heltec/lora/transmit`, and
 `GET /api/heltec/status`. Field logging uses `GET|POST /api/heltec/fieldlog`,
 `GET /api/heltec/fieldlog/files`, and
-`GET /api/heltec/fieldlog/download?name=...`. Starting accepts `gps`, `ble`, and
-`autoResume` booleans; stopping requires `action=stop`. The authenticated reboot endpoint is `POST /reboot`;
+`GET /api/heltec/fieldlog/download?name=...`. Starting accepts `gps`, `ble`,
+`wifi`, and `autoResume` booleans; stopping requires `action=stop`. The
+authenticated reboot endpoint is `POST /reboot`;
 it requires `action=restart` and the literal confirmation field `RESTART`. The
 history POST only accepts `action=clear`. The transmit endpoint additionally
 requires the literal confirmation field `TRANSMIT`.
@@ -150,6 +168,21 @@ responsible for choosing a frequency and usage pattern permitted in their
 location. Boot diagnostics and OLED controls never transmit.
 
 Validated on the target board:
+
+- Unified Bruce/Marauder application-only update flashed and hash-verified on
+  ESP32-S3 MAC `8c:fd:49:b6:8c:14` while preserving NVS and LittleFS.
+- An active GPS+BLE+Wi-Fi session recovered automatically across eight reset
+  markers. Android rejoined BruceNet and re-authenticated without another
+  approval prompt after a controlled reset.
+- The final Android-exported session contained 1,379 complete records: 600
+  Wi-Fi observations, 738 BLE observations, 31 Android GPS fixes, eight
+  `session_resume` records, one `session_start`, and one terminal
+  `session_stop`. Offline validation found zero interrupted tails; 48 Wi-Fi and
+  57 BLE records carried a recent phone location.
+- Automatic passive scans retained 14 of the 64 available result slots while
+  two WebUI clients remained connected. The complete authenticated regression
+  passed afterward with BruceNet in AP+STA mode and the LoRa transmit counter
+  unchanged at zero.
 
 - SX1262 SPI initialization and receive-mode entry: RadioLib status `0`
   (`RADIOLIB_ERR_NONE`)

@@ -253,7 +253,14 @@ def run(args: argparse.Namespace) -> None:
     anonymous = build_opener()
     status, _ = request(anonymous, base_url, "GET", "/api/heltec/status", timeout=args.timeout)
     require(status == 401, f"unauthenticated hardware status returned HTTP {status}, expected 401")
-    for path in ("/api/heltec/fieldlog", "/api/heltec/fieldlog/files"):
+    for path in (
+        "/api/heltec/capabilities",
+        "/api/heltec/wifi",
+        "/api/heltec/wifi/results",
+        "/api/heltec/fieldlog/phone-gps",
+        "/api/heltec/fieldlog",
+        "/api/heltec/fieldlog/files",
+    ):
         status, _ = request(anonymous, base_url, "GET", path, timeout=args.timeout)
         require(status == 401, f"unauthenticated {path} returned HTTP {status}, expected 401")
     print("PASS unauthenticated hardware and field-log data are rejected")
@@ -368,6 +375,83 @@ def run(args: argparse.Namespace) -> None:
             "PASS WebUI access-point telemetry is available "
             f"({network['ssid']}, {network_ip}, channel {network['channel']}, "
             f"clients={network['connectedClients']})"
+        )
+
+        status, body = request(
+            authenticated, base_url, "GET", "/api/heltec/capabilities", timeout=args.timeout
+        )
+        require(status == 200, f"unified capabilities returned HTTP {status}")
+        capabilities = parse_json(body, "unified capabilities")
+        require(capabilities.get("apiVersion") == 2, "unified API version is invalid")
+        require(
+            capabilities.get("firmwareFamily") == "Bruce + Marauder Unified",
+            "unified firmware family is invalid",
+        )
+        capability_names = capabilities.get("capabilities")
+        require(isinstance(capability_names, list), "unified capability list is missing")
+        require(
+            {
+                "passive-wifi-survey",
+                "wifi-device-list",
+                "authenticated-android-gps-assist",
+            }.issubset(set(capability_names)),
+            "unified passive Wi-Fi capabilities are incomplete",
+        )
+        require(
+            capabilities.get("constraints", {}).get("surveyMode") == "passive receive only",
+            "unified survey safety constraint is missing",
+        )
+        print("PASS unified Bruce/Marauder capability contract is available")
+
+        status, body = request(
+            authenticated, base_url, "GET", "/api/heltec/wifi", timeout=args.timeout
+        )
+        require(status == 200, f"Wi-Fi survey status returned HTTP {status}")
+        wifi_status = parse_json(body, "Wi-Fi survey status")
+        require(wifi_status.get("service") == "marauder-passive-wifi", "Wi-Fi survey service is invalid")
+        require(wifi_status.get("initialized") is True, "Wi-Fi survey is not initialized")
+        require(wifi_status.get("passive") is True, "Wi-Fi survey is not marked passive")
+        require(isinstance(wifi_status.get("scanning"), bool), "Wi-Fi scanning state is invalid")
+        require(isinstance(wifi_status.get("generation"), int), "Wi-Fi generation is invalid")
+        require(int(wifi_status.get("capacity", 0)) > 0, "Wi-Fi survey capacity is invalid")
+
+        status, body = request(
+            authenticated, base_url, "GET", "/api/heltec/wifi/results", timeout=args.timeout
+        )
+        require(status == 200, f"Wi-Fi survey results returned HTTP {status}")
+        wifi_results = parse_json(body, "Wi-Fi survey results")
+        networks = wifi_results.get("networks")
+        require(isinstance(networks, list), "Wi-Fi result list is invalid")
+        require(int(wifi_results.get("count", -1)) == len(networks), "Wi-Fi result count is invalid")
+        require(
+            len(networks) <= int(wifi_results.get("capacity", -1)),
+            "Wi-Fi result list exceeds its capacity",
+        )
+        for access_point in networks:
+            require(isinstance(access_point, dict), "Wi-Fi results contain a non-object")
+            require(
+                isinstance(access_point.get("bssid"), str)
+                and re.fullmatch(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", access_point["bssid"])
+                is not None,
+                "Wi-Fi result BSSID is invalid",
+            )
+            require(
+                isinstance(access_point.get("ssid"), str) and len(access_point["ssid"]) <= 32,
+                "Wi-Fi result SSID is invalid",
+            )
+            require(
+                isinstance(access_point.get("rssiDbm"), int)
+                and -127 <= access_point["rssiDbm"] <= 20,
+                "Wi-Fi result RSSI is invalid",
+            )
+            require(
+                isinstance(access_point.get("channel"), int)
+                and 1 <= access_point["channel"] <= 14,
+                "Wi-Fi result channel is invalid",
+            )
+        print(
+            "PASS bounded passive Marauder Wi-Fi survey data is available "
+            f"({len(networks)} of {wifi_results['capacity']} entries)"
         )
 
         status, body = request(
@@ -531,13 +615,20 @@ def run(args: argparse.Namespace) -> None:
         require(isinstance(field_log.get("sessionId"), int), "field-log session ID is invalid")
         field_gps = field_log.get("gps")
         field_ble = field_log.get("ble")
+        field_wifi = field_log.get("wifi")
         field_storage = field_log.get("storage")
         require(isinstance(field_gps, dict), "field-log GPS status is missing")
         require(isinstance(field_ble, dict), "field-log BLE status is missing")
+        require(isinstance(field_wifi, dict), "field-log Wi-Fi status is missing")
         require(isinstance(field_storage, dict), "field-log storage status is missing")
         require(
             isinstance(field_gps.get("fixes"), int) and field_gps["fixes"] >= 0,
             "field-log GPS counter is invalid",
+        )
+        require(
+            isinstance(field_gps.get("phoneFixes"), int)
+            and 0 <= field_gps["phoneFixes"] <= field_gps["fixes"],
+            "field-log phone GPS counter is invalid",
         )
         require(
             isinstance(field_ble.get("observations"), int) and field_ble["observations"] >= 0,
@@ -547,6 +638,15 @@ def run(args: argparse.Namespace) -> None:
             isinstance(field_ble.get("uniqueDevices"), int)
             and 0 <= field_ble["uniqueDevices"] <= int(field_ble.get("uniqueCapacity", -1)),
             "field-log BLE unique-device counter is invalid",
+        )
+        require(
+            isinstance(field_wifi.get("observations"), int) and field_wifi["observations"] >= 0,
+            "field-log Wi-Fi observation counter is invalid",
+        )
+        require(
+            isinstance(field_wifi.get("uniqueNetworks"), int)
+            and 0 <= field_wifi["uniqueNetworks"] <= int(field_wifi.get("uniqueCapacity", -1)),
+            "field-log Wi-Fi unique-network counter is invalid",
         )
         total_storage = int(field_storage.get("totalBytes", 0))
         used_storage = int(field_storage.get("usedBytes", -1))
@@ -605,9 +705,12 @@ def run(args: argparse.Namespace) -> None:
             "formatVersion": 1,
             "exportedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "hardware": board_status,
+            "capabilities": capabilities,
             "gpsTrack": gps_track,
             "loraStatus": initial_lora,
             "loraHistory": history,
+            "wifiStatus": wifi_status,
+            "wifiResults": wifi_results,
             "fieldLog": field_log,
             "fieldLogFiles": field_log_files,
         }
@@ -618,9 +721,12 @@ def run(args: argparse.Namespace) -> None:
                 "formatVersion",
                 "exportedAt",
                 "hardware",
+                "capabilities",
                 "gpsTrack",
                 "loraStatus",
                 "loraHistory",
+                "wifiStatus",
+                "wifiResults",
                 "fieldLog",
                 "fieldLogFiles",
             },
@@ -683,6 +789,27 @@ def run(args: argparse.Namespace) -> None:
         error = parse_json(body, "empty field-log control").get("error")
         require(error == "missing action", f"field-log control returned the wrong error: {error!r}")
         print("PASS field-log control requires an explicit action")
+
+        status, body = request(
+            authenticated,
+            base_url,
+            "POST",
+            "/api/heltec/fieldlog/phone-gps",
+            {"latitude": "91", "longitude": "0"},
+            timeout=args.timeout,
+        )
+        require(status == 400, f"invalid phone GPS fix returned HTTP {status}, expected 400")
+        error = parse_json(body, "invalid phone GPS response").get("error")
+        require(error == "invalid coordinates", f"phone GPS route returned the wrong error: {error!r}")
+        print("PASS phone-assisted GPS rejects invalid coordinates without changing logger state")
+
+        status, body = request(
+            authenticated, base_url, "POST", "/api/heltec/wifi", timeout=args.timeout
+        )
+        require(status == 400, f"empty Wi-Fi survey control returned HTTP {status}, expected 400")
+        error = parse_json(body, "empty Wi-Fi survey control").get("error")
+        require(error == "missing action", f"Wi-Fi survey control returned the wrong error: {error!r}")
+        print("PASS Wi-Fi survey control requires an explicit action")
 
         status, body = request(
             authenticated, base_url, "POST", "/reboot", timeout=args.timeout

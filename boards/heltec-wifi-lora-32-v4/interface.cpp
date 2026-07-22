@@ -1,6 +1,7 @@
 #include "core/powerSave.h"
 #include "core/settings.h"
 #include "field_logger.h"
+#include "marauder_wifi.h"
 #if !defined(LITE_VERSION)
 #include "modules/lora/LoRaRF.h"
 #endif
@@ -38,7 +39,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C oled(
 bool webUiStatusVisible = false;
 bool webUiApMode = true;
 uint8_t statusPage = 0;
-constexpr uint8_t kStatusPageCount = 6;
+constexpr uint8_t kStatusPageCount = 7;
 int16_t radioDiagnostic = RADIOLIB_ERR_UNKNOWN;
 int16_t radioReceiveDiagnostic = RADIOLIB_ERR_UNKNOWN;
 uint32_t gpsDiagnosticBytes = 0;
@@ -259,7 +260,8 @@ void drawWebUiPage() {
                         : statusPage == 2 ? "HELTEC LIVE GPS"
                         : statusPage == 3 ? "HELTEC LORA RX"
                         : statusPage == 4 ? "HELTEC HARDWARE"
-                                          : "HELTEC FIELD LOG";
+                        : statusPage == 5 ? "UNIFIED FIELD LOG"
+                                          : "MARAUDER WIFI";
     drawLine(11, title);
     oled.drawHLine(0, 14, 128);
     if (statusPage == 1) {
@@ -345,18 +347,31 @@ void drawWebUiPage() {
             String("Log: ") + (fieldLog.active ? "ACTIVE" : "off") +
                 (fieldLog.autoResume ? " Auto:on" : " Auto:off")
         );
-        drawLine(
-            39,
-            "GPS " + String(fieldLog.gpsFixes) + " BLE " + String(fieldLog.bleObservations) +
-                "/" + String(fieldLog.uniqueBleDevices)
-        );
+        drawLine(39, "G " + String(fieldLog.gpsFixes) + " B " + String(fieldLog.bleObservations) +
+                         " W " + String(fieldLog.wifiObservations));
         drawLine(
             51,
             hasOledActionMessage(5)
                 ? oledActionMessage
-                : "S" + String(fieldLog.sessionId) + " " + String(fieldLog.sessionBytes / 1024) + "KiB"
+                : "U B" + String(fieldLog.uniqueBleDevices) + " W" +
+                      String(fieldLog.uniqueWifiNetworks) + " S" + String(fieldLog.sessionId)
         );
-        drawLine(63, "Tap>Net Hold>toggle");
+        drawLine(63, "Tap>WiFi Hold>toggle");
+    } else if (statusPage == 6) {
+        const HeltecMarauderWifiSnapshot survey = heltecMarauderWifiSnapshot();
+        drawLine(27, String("Survey: ") + (survey.scanning ? "SCANNING" : "idle"));
+        drawLine(
+            39,
+            "APs " + String(survey.networkCount) + "/64 Scan " + String(survey.scansCompleted)
+        );
+        drawLine(
+            51,
+            hasOledActionMessage(6)
+                ? oledActionMessage
+                : (survey.lastError.length() > 0 ? survey.lastError.substring(0, 21)
+                                                 : "Passive / no TX")
+        );
+        drawLine(63, "Tap>Net Hold>scan");
     } else if (webUiApMode) {
         drawLine(29, "WiFi: " + bruceConfig.wifiAp.ssid);
         drawLine(41, "Pass: " + bruceConfig.wifiAp.pwd);
@@ -706,6 +721,7 @@ void _setBrightness(uint8_t brightval) { (void)brightval; }
 void InputHandler(void) {
     checkPowerSaveTime();
     heltecFieldLoggerPoll();
+    heltecMarauderWifiPoll();
     PrevPress = false;
     NextPress = false;
     SelPress = false;
@@ -797,7 +813,8 @@ void InputHandler(void) {
         } else if (statusPage == 5) {
             longPressHandled = true;
             const bool wasActive = heltecFieldLoggerIsActive();
-            const bool ok = wasActive ? heltecFieldLoggerStop() : heltecFieldLoggerStart(true, true, true);
+            const bool ok = wasActive ? heltecFieldLoggerStop()
+                                      : heltecFieldLoggerStart(true, true, true, true);
             setOledActionMessage(
                 5,
                 ok ? (wasActive ? "Log stopped" : "Log started") : "Log action failed"
@@ -807,6 +824,13 @@ void InputHandler(void) {
                 wasActive ? "stop" : "start",
                 ok ? "ok" : "failed"
             );
+            drawWebUiPage();
+            lastLiveRefreshMs = millis();
+        } else if (statusPage == 6) {
+            longPressHandled = true;
+            const bool ok = heltecMarauderWifiRequestScan();
+            setOledActionMessage(6, ok ? "Scan requested" : "Survey busy");
+            Serial.printf("[UNIFIED] OLED passive WiFi survey: %s\n", ok ? "queued" : "busy");
             drawWebUiPage();
             lastLiveRefreshMs = millis();
         }
