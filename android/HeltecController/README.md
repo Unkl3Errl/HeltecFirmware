@@ -97,14 +97,29 @@ Open this directory in Android Studio, allow Gradle to synchronize, and build
 the `app` configuration. From a terminal with Android SDK 35 installed:
 
 ```sh
-./gradlew testDebugUnitTest assembleDebug
+./gradlew testDebugUnitTest assembleDebug assembleRelease
 ```
 
-The debug APK is written to:
+The debug APK is written to
+`app/build/outputs/apk/debug/app-debug.apk`. Without signing variables, the
+release task intentionally produces
+`app/build/outputs/apk/release/app-release-unsigned.apk`.
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
+For a signed release, provide all four values through the process environment:
+
+```sh
+export HELTEC_RELEASE_STORE_FILE=/secure/path/HeltecController-release.p12
+export HELTEC_RELEASE_STORE_PASSWORD='from a secure secret store'
+export HELTEC_RELEASE_KEY_ALIAS=heltec-controller
+export HELTEC_RELEASE_KEY_PASSWORD="$HELTEC_RELEASE_STORE_PASSWORD"
+./gradlew assembleRelease
 ```
+
+Do not put literal signing passwords or the private keystore in this repository.
+The signed APK is written to
+`app/build/outputs/apk/release/app-release.apk`. The permanent public
+certificate identity and continuity requirements are documented in
+[`SIGNING.md`](SIGNING.md).
 
 The app is configured with package ID `com.unkl3errl.helteccontroller`, minimum
 API 29, target API 35, and version `0.3.0`.
