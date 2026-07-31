@@ -439,6 +439,7 @@ void setup() {
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     extern void heltecFieldLoggerBegin();
     extern void heltecMarauderWifiBegin();
+    heltecV4DrawBootStage("Loading field logs");
     heltecFieldLoggerBegin();
     heltecMarauderWifiBegin();
     heltecV4DrawBootStage("Starting services");

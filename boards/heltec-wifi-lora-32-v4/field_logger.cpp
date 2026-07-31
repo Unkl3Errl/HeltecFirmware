@@ -20,6 +20,7 @@ constexpr size_t kUniqueBleCapacity = 256;
 constexpr size_t kRecentBleCapacity = 128;
 constexpr size_t kUniqueWifiCapacity = 256;
 constexpr size_t kRecentWifiCapacity = 128;
+constexpr size_t kReconstructionReadBlockBytes = 4096;
 constexpr uint32_t kBleObservationIntervalMs = 60 * 1000;
 constexpr uint32_t kWifiObservationIntervalMs = 60 * 1000;
 constexpr uint32_t kBleScanDurationMs = 5000;
@@ -374,8 +375,75 @@ void countRecordLocked(JsonDocument &document) {
     }
 }
 
+bool extractJsonStringField(const String &line, const char *marker, String &value) {
+    const int markerAt = line.indexOf(marker);
+    if (markerAt < 0) return false;
+    const int valueAt = markerAt + strlen(marker);
+    const int valueEnd = line.indexOf('"', valueAt);
+    if (valueEnd < valueAt) return false;
+    value = line.substring(valueAt, valueEnd);
+    return true;
+}
+
+bool countGeneratedRecordLineLocked(const String &line) {
+    if (!line.startsWith("{") || !line.endsWith("}") ||
+        line.indexOf("\"formatVersion\":1") < 0) {
+        return false;
+    }
+
+    if (line.indexOf("\"type\":\"gps\"") >= 0) {
+        gpsFixes++;
+        if (line.indexOf("\"source\":\"android\"") >= 0) phoneGpsFixes++;
+        return true;
+    }
+    if (line.indexOf("\"type\":\"ble\"") >= 0) {
+        bleObservations++;
+        String address;
+        if (extractJsonStringField(line, "\"address\":\"", address) && address.length() == 17) {
+            noteUniqueBleLocked(hashBleAddress(address));
+        }
+        return true;
+    }
+    if (line.indexOf("\"type\":\"wifi\"") >= 0) {
+        wifiObservations++;
+        String bssid;
+        if (extractJsonStringField(line, "\"bssid\":\"", bssid) && bssid.length() == 17) {
+            noteUniqueWifiLocked(hashWifiAddress(bssid));
+        }
+        return true;
+    }
+    if (line.indexOf("\"type\":\"session_resume\"") >= 0) {
+        resumeCount++;
+        return true;
+    }
+    if (line.indexOf("\"type\":\"tail_recovery\"") >= 0) {
+        recoveredSegments++;
+        resumeCount++;
+        return true;
+    }
+    return line.indexOf("\"type\":\"session_start\"") >= 0 ||
+           line.indexOf("\"type\":\"session_stop\"") >= 0 ||
+           line.indexOf("\"type\":\"session_suspend\"") >= 0 ||
+           line.indexOf("\"type\":\"session_interrupted\"") >= 0;
+}
+
+void countReconstructedLineLocked(const String &line, size_t &reconstructedRecords) {
+    if (line.length() == 0) return;
+    if (!countGeneratedRecordLineLocked(line)) {
+        JsonDocument document;
+        if (deserializeJson(document, line) == DeserializationError::Ok) {
+            countRecordLocked(document);
+        }
+    }
+    reconstructedRecords++;
+    if ((reconstructedRecords & 0x3ff) == 0) delay(1);
+}
+
 void reconstructSessionLocked() {
     clearSessionStateLocked();
+    const uint32_t reconstructionStartedMs = millis();
+    size_t reconstructedRecords = 0;
+    static uint8_t readBlock[kReconstructionReadBlockBytes];
     const String prefix = sessionPrefix(sessionId);
     File directory = LittleFS.open(kDirectory);
     if (!directory || !directory.isDirectory()) return;
@@ -384,20 +452,45 @@ void reconstructSessionLocked() {
     while (entry) {
         const String name = basenameOf(entry.path());
         if (!entry.isDirectory() && name.startsWith(prefix) && name.endsWith(".ndjson")) {
+            entry.setBufferSize(kReconstructionReadBlockBytes);
             sessionBytes += entry.size();
-            const bool completeTail = fileHasCompleteTail(String(entry.path()));
-            while (entry.available()) {
-                const String line = entry.readStringUntil('\n');
-                if (!completeTail && entry.position() >= entry.size()) continue;
-                if (line.length() == 0) continue;
-                JsonDocument document;
-                if (deserializeJson(document, line) == DeserializationError::Ok) countRecordLocked(document);
+            String line;
+            line.reserve(512);
+            size_t bytesRead = 0;
+            while ((bytesRead = entry.read(readBlock, sizeof(readBlock))) > 0) {
+                size_t lineStart = 0;
+                for (size_t index = 0; index < bytesRead; index++) {
+                    if (readBlock[index] != '\n') continue;
+                    if (index > lineStart) {
+                        line.concat(
+                            reinterpret_cast<const char *>(&readBlock[lineStart]),
+                            static_cast<unsigned int>(index - lineStart)
+                        );
+                    }
+                    countReconstructedLineLocked(line, reconstructedRecords);
+                    line = "";
+                    lineStart = index + 1;
+                }
+                if (lineStart < bytesRead) {
+                    line.concat(
+                        reinterpret_cast<const char *>(&readBlock[lineStart]),
+                        static_cast<unsigned int>(bytesRead - lineStart)
+                    );
+                }
             }
+            // A non-empty remainder has no newline and is therefore an interrupted
+            // record. It is deliberately excluded, matching the tail-recovery rules.
         }
         entry.close();
         entry = directory.openNextFile();
     }
     directory.close();
+    Serial.printf(
+        "[HELTEC] Reconstructed %u field-log records / %u bytes in %lu ms\n",
+        static_cast<unsigned>(reconstructedRecords),
+        static_cast<unsigned>(sessionBytes),
+        static_cast<unsigned long>(millis() - reconstructionStartedMs)
+    );
 }
 
 void persistSessionLocked() {
