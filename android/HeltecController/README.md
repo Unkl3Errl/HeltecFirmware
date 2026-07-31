@@ -74,6 +74,12 @@ The Marauder interface includes:
 - Quick actions for help, GPS, Wi-Fi/BLE discovery, list output, and stopping a
   running scan. **AP Survey 18s** clears stale results, covers every 2.4 GHz
   channel, stops automatically, and prints the resulting AP list.
+- Structured AP and BLE result views with CSV export through Android's document
+  picker.
+- Automatic timestamped USB session recording in private app storage. Previous
+  sessions can be viewed, renamed, exported, shared, or deleted. Password-like
+  arguments in `join` commands are redacted from saved session files.
+- TXT export of the current bounded live-console buffer.
 - The complete upstream command line through the command input.
 - A command safety classifier. Transmit/state-changing commands require typed
   `AUTHORIZE` confirmation; unknown future commands require a review dialog.
@@ -90,6 +96,10 @@ required for app control.
 ## Security and operating limits
 
 - WebUI and Wi-Fi passwords are kept in memory and are not persisted by the app.
+- Marauder USB session files remain in private app storage until explicitly
+  deleted or the app is uninstalled. `join -p` and named password values are
+  redacted, but exported/shared radio findings can still contain SSIDs, device
+  names, and other identifiers; review them before sharing.
 - Phone location is sent only to the selected device over its local link while
   phone GPS assist is visibly enabled; it is not uploaded to an internet service.
 - Bruce uses cleartext HTTP because the isolated ESP32 access point exposes an
@@ -130,4 +140,4 @@ certificate identity and continuity requirements are documented in
 [`SIGNING.md`](SIGNING.md).
 
 The app is configured with package ID `com.unkl3errl.helteccontroller`, minimum
-API 29, target API 35, and version `0.3.2`.
+API 29, target API 35, and version `0.3.3`.

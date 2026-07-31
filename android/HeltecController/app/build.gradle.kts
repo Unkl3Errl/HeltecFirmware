@@ -29,8 +29,8 @@ android {
         applicationId = "com.unkl3errl.helteccontroller"
         minSdk = 29
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.2"
+        versionCode = 6
+        versionName = "0.3.3"
 
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }
@@ -70,6 +70,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.core:core:1.15.0")
     implementation("com.github.mik3y:usb-serial-for-android:3.10.0")
     testImplementation("junit:junit:4.13.2")
 }

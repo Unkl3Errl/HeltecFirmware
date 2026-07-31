@@ -31,6 +31,14 @@
                 android:text="No Marauder USB device connected" />
 
             <TextView
+                android:id="@+id/marauderRecordingStatus"
+                style="@style/MutedText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Session recording starts automatically with the USB link" />
+
+            <TextView
                 style="@style/MutedText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -52,6 +60,42 @@
 
                 <Button android:id="@+id/marauderConnect" style="@style/ActionButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginRight="4dp" android:layout_weight="1" android:text="CONNECT" />
                 <Button android:id="@+id/marauderDisconnect" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginLeft="4dp" android:layout_weight="1" android:text="DISCONNECT" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/card_bg"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="STRUCTURED RESULTS" />
+
+            <TextView
+                android:id="@+id/marauderApResultsStatus"
+                style="@style/BodyText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Access points · no structured results yet" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/marauderViewApResults" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginRight="4dp" android:layout_weight="1" android:text="VIEW APS" />
+                <Button android:id="@+id/marauderExportApCsv" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginLeft="4dp" android:layout_weight="1" android:text="EXPORT AP CSV" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/marauderBleResultsStatus"
+                style="@style/BodyText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="BLE devices · no structured results yet" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/marauderViewBleResults" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginRight="4dp" android:layout_weight="1" android:text="VIEW BLE" />
+                <Button android:id="@+id/marauderExportBleCsv" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginLeft="4dp" android:layout_weight="1" android:text="EXPORT BLE CSV" />
             </LinearLayout>
         </LinearLayout>
 
@@ -158,6 +202,29 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="Commands that transmit, change network state, reboot, or update firmware require a separate confirmation." />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/card_bg"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView style="@style/SectionTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="SESSION HISTORY" />
+
+            <TextView
+                style="@style/MutedText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="USB sessions are timestamped in private app storage. Password-like join arguments are redacted before saving. History can be viewed, renamed, exported, shared, or deleted." />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/marauderSessionHistory" style="@style/ActionButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginRight="4dp" android:layout_weight="1" android:text="SESSIONS" />
+                <Button android:id="@+id/marauderExportConsole" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginLeft="4dp" android:layout_weight="1" android:text="EXPORT CONSOLE" />
+            </LinearLayout>
         </LinearLayout>
 
         <TextView

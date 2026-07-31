@@ -33,7 +33,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="CONTROLLER 0.3.2 // BRUCE + MARAUDER"
+                android:text="CONTROLLER 0.3.3 // BRUCE + MARAUDER"
                 android:textColor="@color/muted"
                 android:textSize="11sp" />
         </LinearLayout>

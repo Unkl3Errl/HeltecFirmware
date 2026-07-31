@@ -20,13 +20,18 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import com.unkl3errl.helteccontroller.bruce.BruceApiClient
 import com.unkl3errl.helteccontroller.bruce.BruceNetworkManager
+import java.io.File
 
 class MainActivity : Activity(), BruceNetworkManager.Listener {
     companion object {
         private const val WIFI_PERMISSION_REQUEST = 2001
         private const val BRUCE_LOG_EXPORT_REQUEST = 2002
         private const val PHONE_GPS_PERMISSION_REQUEST = 2003
+        private const val MARAUDER_EXPORT_REQUEST = 2004
         private const val STATE_PENDING_BRUCE_EXPORT = "pendingBruceExport"
+        private const val STATE_PENDING_MARAUDER_EXPORT_PATH = "pendingMarauderExportPath"
+        private const val STATE_PENDING_MARAUDER_EXPORT_NAME = "pendingMarauderExportName"
+        private const val STATE_PENDING_MARAUDER_EXPORT_TYPE = "pendingMarauderExportType"
     }
 
     private lateinit var globalStatus: TextView
@@ -42,6 +47,9 @@ class MainActivity : Activity(), BruceNetworkManager.Listener {
     private val bruceClient = BruceApiClient()
     private var pendingWifi: Pair<String, String>? = null
     private var pendingBruceExportName: String? = null
+    private var pendingMarauderExportPath: String? = null
+    private var pendingMarauderExportName: String? = null
+    private var pendingMarauderExportType: String? = null
     private var phoneGpsRequested = false
     private val phoneLocationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
@@ -53,6 +61,9 @@ class MainActivity : Activity(), BruceNetworkManager.Listener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         pendingBruceExportName = savedInstanceState?.getString(STATE_PENDING_BRUCE_EXPORT)
+        pendingMarauderExportPath = savedInstanceState?.getString(STATE_PENDING_MARAUDER_EXPORT_PATH)
+        pendingMarauderExportName = savedInstanceState?.getString(STATE_PENDING_MARAUDER_EXPORT_NAME)
+        pendingMarauderExportType = savedInstanceState?.getString(STATE_PENDING_MARAUDER_EXPORT_TYPE)
 
         globalStatus = findViewById(R.id.globalStatus)
         container = findViewById(R.id.screenContainer)
@@ -76,6 +87,7 @@ class MainActivity : Activity(), BruceNetworkManager.Listener {
         marauderController = MarauderScreenController(
             activity = this,
             root = marauderView,
+            requestExport = ::requestMarauderExport,
             setGlobalStatus = ::setGlobalStatus,
         )
 
@@ -94,21 +106,33 @@ class MainActivity : Activity(), BruceNetworkManager.Listener {
 
     override fun onSaveInstanceState(outState: Bundle) {
         pendingBruceExportName?.let { outState.putString(STATE_PENDING_BRUCE_EXPORT, it) }
+        pendingMarauderExportPath?.let {
+            outState.putString(STATE_PENDING_MARAUDER_EXPORT_PATH, it)
+        }
+        pendingMarauderExportName?.let {
+            outState.putString(STATE_PENDING_MARAUDER_EXPORT_NAME, it)
+        }
+        pendingMarauderExportType?.let {
+            outState.putString(STATE_PENDING_MARAUDER_EXPORT_TYPE, it)
+        }
         super.onSaveInstanceState(outState)
     }
 
     @Deprecated("Deprecated in Android; retained for API 29 document-provider compatibility")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != BRUCE_LOG_EXPORT_REQUEST) return
-
-        val fileName = pendingBruceExportName
-        pendingBruceExportName = null
-        val destination = data?.data
-        if (resultCode == RESULT_OK && fileName != null && destination != null) {
-            bruceController.exportFieldLog(fileName, destination)
-        } else {
-            bruceController.onExportCancelled()
+        when (requestCode) {
+            BRUCE_LOG_EXPORT_REQUEST -> {
+                val fileName = pendingBruceExportName
+                pendingBruceExportName = null
+                val destination = data?.data
+                if (resultCode == RESULT_OK && fileName != null && destination != null) {
+                    bruceController.exportFieldLog(fileName, destination)
+                } else {
+                    bruceController.onExportCancelled()
+                }
+            }
+            MARAUDER_EXPORT_REQUEST -> finishMarauderExport(resultCode, data?.data)
         }
     }
 
@@ -258,6 +282,60 @@ class MainActivity : Activity(), BruceNetworkManager.Listener {
                 pendingBruceExportName = null
                 bruceController.onExportError("No Android document provider is available")
             }
+    }
+
+    private fun requestMarauderExport(request: MarauderExportRequest) {
+        clearPendingMarauderExport()
+        val temporary = runCatching {
+            File.createTempFile("marauder-export-", ".tmp", cacheDir).apply {
+                writeBytes(request.content)
+            }
+        }.getOrElse {
+            marauderController.onExportError("Could not prepare the export: ${it.message}")
+            return
+        }
+        pendingMarauderExportPath = temporary.absolutePath
+        pendingMarauderExportName = request.suggestedName
+        pendingMarauderExportType = request.mimeType
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = request.mimeType
+            putExtra(Intent.EXTRA_TITLE, request.suggestedName)
+        }
+        runCatching { startActivityForResult(intent, MARAUDER_EXPORT_REQUEST) }
+            .onFailure {
+                clearPendingMarauderExport()
+                marauderController.onExportError("No Android document provider is available")
+            }
+    }
+
+    private fun finishMarauderExport(resultCode: Int, destination: Uri?) {
+        val path = pendingMarauderExportPath
+        val fileName = pendingMarauderExportName
+        if (resultCode != RESULT_OK || destination == null || path == null || fileName == null) {
+            clearPendingMarauderExport()
+            marauderController.onExportCancelled()
+            return
+        }
+        runCatching {
+            contentResolver.openOutputStream(destination, "w")?.use { output ->
+                File(path).inputStream().use { input -> input.copyTo(output) }
+            } ?: throw IllegalStateException("Android could not open the selected destination")
+        }.onSuccess {
+            clearPendingMarauderExport()
+            marauderController.onExportSaved(fileName)
+        }.onFailure { error ->
+            runCatching { contentResolver.delete(destination, null, null) }
+            clearPendingMarauderExport()
+            marauderController.onExportError("Export failed: ${error.message ?: error.javaClass.simpleName}")
+        }
+    }
+
+    private fun clearPendingMarauderExport() {
+        pendingMarauderExportPath?.let { path -> runCatching { File(path).delete() } }
+        pendingMarauderExportPath = null
+        pendingMarauderExportName = null
+        pendingMarauderExportType = null
     }
 
     private fun showScreen(view: View, bruceSelected: Boolean) {
