@@ -6,6 +6,7 @@
 #endif
 #include <ArduinoJson.h>
 #include <cstdlib>
+#include <driver/gpio.h>
 #include <esp32-hal-psram.h>
 #include <RadioLib.h>
 #include <SPI.h>
@@ -428,6 +429,16 @@ void _post_setup_gpio() {
         bruceConfigPins.gps_bus.rx = GPIO_NUM_39;
         bruceConfigPins.gps_bus.tx = GPIO_NUM_38;
         bruceConfigPins.saveFile();
+    }
+
+    // Arduino installs the shared GPIO ISR service lazily on the first
+    // attachInterrupt(). Doing that from an AsyncTCP WebUI callback forces the
+    // allocation through the small cross-core IPC task and can trip its debug
+    // exception/stack guard. Install it once from the controlled boot task;
+    // Arduino treats ESP_ERR_INVALID_STATE as an already initialized service.
+    const esp_err_t gpioIsrStatus = gpio_install_isr_service(0);
+    if (gpioIsrStatus != ESP_OK && gpioIsrStatus != ESP_ERR_INVALID_STATE) {
+        Serial.printf("[HELTEC] GPIO ISR service initialization failed: %d\n", gpioIsrStatus);
     }
 
     heltecV4DrawBootStage("Testing SX1262");

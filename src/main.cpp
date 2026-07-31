@@ -539,6 +539,7 @@ void setup() {
     _post_setup_gpio();
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     extern void heltecFieldLoggerBegin();
+    heltecV4DrawBootStage("Loading field logs");
     heltecFieldLoggerBegin();
     heltecV4DrawBootStage("Starting services");
 #endif
