@@ -1,0 +1,53 @@
+name: Build Android Controller
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "android/HeltecController/**"
+      - ".github/workflows/android-controller.yml"
+  push:
+    branches: [main]
+    paths:
+      - "android/HeltecController/**"
+      - ".github/workflows/android-controller.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android/HeltecController
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and build
+        run: ./gradlew testDebugUnitTest assembleDebug assembleRelease
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: HeltecController
+          path: |
+            android/HeltecController/app/build/outputs/apk/debug/app-debug.apk
+            android/HeltecController/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 5
+          if-no-files-found: error

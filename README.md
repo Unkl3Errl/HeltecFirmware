@@ -40,6 +40,21 @@ lifecycles instead of running a second firmware stack.
 The complete pin map, endpoint contract, safety constraints, and target-board
 validation record are in [HELTEC_V4_PORT.md](HELTEC_V4_PORT.md).
 
+## Android controller
+
+The native Android companion app is maintained in
+[`android/HeltecController`](android/HeltecController). It controls this
+firmware over the authenticated BruceNet WebUI API, exports field logs through
+Android's document picker, and can supply explicitly labeled phone GPS fixes
+while logging. Its legacy Marauder tab also supports the separate Heltec
+Marauder build over USB OTG.
+
+The app keeps device credentials in memory, routes Bruce requests through the
+selected local-only Wi-Fi network, and requires confirmation for transmitting
+or state-changing operations. See the app's
+[`README.md`](android/HeltecController/README.md) for requirements, supported
+features, and build instructions.
+
 ## Build
 
 Bruce's Espressif platform requires Python 3.10 through 3.13. With PlatformIO
