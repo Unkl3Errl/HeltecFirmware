@@ -72,7 +72,7 @@
             </LinearLayout>
 
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-                <Button android:id="@+id/cmdWifiScan" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginRight="3dp" android:layout_weight="1" android:text="WI-FI SCAN" />
+                <Button android:id="@+id/cmdWifiScan" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginRight="3dp" android:layout_weight="1" android:text="AP SURVEY 18S" />
                 <Button android:id="@+id/cmdBleScan" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginLeft="3dp" android:layout_marginRight="3dp" android:layout_weight="1" android:text="BLE SCAN" />
                 <Button android:id="@+id/cmdStop" style="@style/DangerButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginLeft="3dp" android:layout_weight="1" android:text="STOP" />
             </LinearLayout>
@@ -99,17 +99,38 @@
                 android:orientation="horizontal">
 
                 <TextView style="@style/SectionTitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="LIVE CONSOLE // 115200" />
-                <Button android:id="@+id/consoleClear" style="@style/SecondaryButton" android:layout_width="wrap_content" android:layout_height="40dp" android:minHeight="0dp" android:text="CLEAR" />
             </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:orientation="horizontal">
+
+                <Button android:id="@+id/consolePageUp" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="40dp" android:layout_marginRight="2dp" android:layout_weight="1" android:minHeight="0dp" android:text="UP" />
+                <Button android:id="@+id/consolePageDown" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="40dp" android:layout_marginLeft="2dp" android:layout_marginRight="2dp" android:layout_weight="1" android:minHeight="0dp" android:text="DOWN" />
+                <Button android:id="@+id/consoleLive" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="40dp" android:layout_marginLeft="2dp" android:layout_marginRight="2dp" android:layout_weight="1" android:minHeight="0dp" android:text="LIVE ON" />
+                <Button android:id="@+id/consoleClear" style="@style/SecondaryButton" android:layout_width="0dp" android:layout_height="40dp" android:layout_marginLeft="2dp" android:layout_weight="1" android:minHeight="0dp" android:text="CLEAR" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/MutedText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:text="Drag inside the console or use UP/DOWN to pause auto-follow. Tap LIVE to resume at the newest output." />
 
             <TextView
                 android:id="@+id/marauderConsole"
                 android:layout_width="match_parent"
                 android:layout_height="300dp"
                 android:background="@drawable/input_bg"
+                android:fadeScrollbars="false"
                 android:fontFamily="monospace"
                 android:gravity="bottom"
+                android:overScrollMode="always"
                 android:padding="12dp"
+                android:scrollbarStyle="insideInset"
                 android:scrollbars="vertical"
                 android:text="Connect to begin.\n"
                 android:textColor="@color/teal"

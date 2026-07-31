@@ -69,9 +69,11 @@ USB bridge can be used if the hardware configuration changes.
 
 The Marauder interface includes:
 
-- A live, selectable USB serial console.
+- A live, selectable USB serial console with dedicated page controls. Manual
+  scrolling pauses auto-follow; **Live** resumes at the newest output.
 - Quick actions for help, GPS, Wi-Fi/BLE discovery, list output, and stopping a
-  running scan.
+  running scan. **AP Survey 18s** clears stale results, covers every 2.4 GHz
+  channel, stops automatically, and prints the resulting AP list.
 - The complete upstream command line through the command input.
 - A command safety classifier. Transmit/state-changing commands require typed
   `AUTHORIZE` confirmation; unknown future commands require a review dialog.
@@ -128,4 +130,4 @@ certificate identity and continuity requirements are documented in
 [`SIGNING.md`](SIGNING.md).
 
 The app is configured with package ID `com.unkl3errl.helteccontroller`, minimum
-API 29, target API 35, and version `0.3.1`.
+API 29, target API 35, and version `0.3.2`.
