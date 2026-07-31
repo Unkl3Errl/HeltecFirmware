@@ -24,14 +24,6 @@ String startupAppJSInterpreterFile = "";
 
 MainMenu mainMenu;
 SPIClass sdcardSPI;
-#ifdef USE_HSPI_PORT
-#ifndef VSPI
-#define VSPI FSPI
-#endif
-SPIClass CC_NRF_SPI(VSPI);
-#else
-SPIClass CC_NRF_SPI(HSPI);
-#endif
 
 // Navigation Variables
 volatile bool NextPress = false;
@@ -78,9 +70,7 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             touchPoint.Clear();
-#ifndef USE_TFT_eSPI_TOUCH
             InputHandler();
-#endif
             timer = millis();
         }
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -152,8 +142,6 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
-#include "modules/others/audio.h"                // for playAudioFile
-#include "modules/rf/rf_utils.h"                 // for initCC1101once
 #include <Wire.h>
 
 /*********************************************************************
@@ -190,24 +178,8 @@ void setup_gpio() {
     // init setup from /ports/*/interface.h
     _setup_gpio();
 
-    // Smoochiee v2 uses a AW9325 tro control GPS, MIC, Vibro and CC1101 RX/TX powerlines
+    // Initialize the optional board I/O expander when present.
     ioExpander.init(IO_EXPANDER_ADDRESS, &Wire);
-
-    // Do not pass GPIO_NUM_NC (-1/255) into the CC1101 library. Its setGDO0()
-    // path immediately calls pinMode(), even when no CC1101 is configured.
-    if (bruceConfigPins.CC1101_bus.cs != GPIO_NUM_NC && bruceConfigPins.CC1101_bus.io0 != GPIO_NUM_NC) {
-#if TFT_MOSI > 0
-        if (bruceConfigPins.CC1101_bus.mosi == (gpio_num_t)TFT_MOSI)
-            initCC1101once(&tft.getSPIinstance()); // (T_EMBED), CORE2 and others
-        else
-#endif
-            if (bruceConfigPins.CC1101_bus.mosi == bruceConfigPins.SDCARD_bus.mosi)
-            initCC1101once(&sdcardSPI); // Devices that share the CC1101 and SD-card SPI bus
-                                        // share CC1101 pin with only SDCard
-        else initCC1101once(NULL);
-    }
-    // (ARDUINO_M5STICK_C_PLUS) || (ARDUINO_M5STICK_C_PLUS2) and others that doesn´t share SPI with
-    // other devices (need to change it when Bruce board comes to shore)
 }
 
 /*********************************************************************
@@ -386,32 +358,6 @@ void init_led() {
 }
 
 /*********************************************************************
- **  Function: startup_sound
- **  Play sound or tone depending on device hardware
- *********************************************************************/
-void startup_sound() {
-    if (bruceConfig.soundEnabled == 0) return; // if sound is disabled, do not play sound
-#if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN)
-    // Bip M5 just because it can. Does not bip if splashscreen is bypassed
-    _tone(5000, 50);
-    delay(200);
-    _tone(5000, 50);
-    /*  2fix: menu infinite loop */
-#elif defined(HAS_NS4168_SPKR)
-    // play a boot sound
-    if (bruceConfig.theme.boot_sound) {
-        playAudioFile(bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.boot_sound));
-    } else if (SD.exists("/boot.wav")) {
-        playAudioFile(&SD, "/boot.wav");
-    } else if (LittleFS.exists("/boot.wav")) {
-        playAudioFile(&LittleFS, "/boot.wav");
-    }
-#endif
-#endif
-}
-
-/*********************************************************************
  **  Function: setup
  **  Where the devices are started and variables set
  *********************************************************************/
@@ -488,9 +434,13 @@ void setup() {
     esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
     esp_wifi_set_country(&country);
 
-    // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
+    // Complete board-specific GPIO setup after the display and storage setup.
     _post_setup_gpio();
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    extern void heltecFieldLoggerBegin();
+    extern void heltecMarauderWifiBegin();
+    heltecFieldLoggerBegin();
+    heltecMarauderWifiBegin();
     heltecV4DrawBootStage("Starting services");
 #endif
     // Some board interfaces initialize or reset the backlight in post-setup,
@@ -498,7 +448,6 @@ void setup() {
     setBrightness(bruceConfig.bright, false);
     // end of post gpio begin
 
-    // #ifndef USE_TFT_eSPI_TOUCH
     // This task keeps running all the time, will never stop
     xTaskCreate(
         taskInputHandler,              // Task function
@@ -508,12 +457,10 @@ void setup() {
         2,                             // Task priority (0 to 3), loopTask has priority 2.
         &xHandle                       // Task handle (not used)
     );
-    // #endif
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {
         boot_screen_anim();
-        startup_sound();
     }
     if (bruceConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");

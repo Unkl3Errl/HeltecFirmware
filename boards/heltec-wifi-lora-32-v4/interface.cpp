@@ -1,4 +1,7 @@
 #include "core/powerSave.h"
+#include "core/settings.h"
+#include "field_logger.h"
+#include "marauder_wifi.h"
 #if !defined(LITE_VERSION)
 #include "modules/lora/LoRaRF.h"
 #endif
@@ -36,7 +39,7 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C oled(
 bool webUiStatusVisible = false;
 bool webUiApMode = true;
 uint8_t statusPage = 0;
-constexpr uint8_t kStatusPageCount = 5;
+constexpr uint8_t kStatusPageCount = 7;
 int16_t radioDiagnostic = RADIOLIB_ERR_UNKNOWN;
 int16_t radioReceiveDiagnostic = RADIOLIB_ERR_UNKNOWN;
 uint32_t gpsDiagnosticBytes = 0;
@@ -137,6 +140,8 @@ void gpsMonitorTask(void *parameter) {
 
         const uint32_t now = millis();
         if (receivedData || now - lastSnapshotMs >= 500) {
+            bool capturedTrackPoint = false;
+            HeltecFieldGpsRecord fieldRecord;
             const bool locationUpdated = parser.location.isUpdated();
             const bool validLocation = parser.location.isValid();
             const double latitude = validLocation ? parser.location.lat() : 0.0;
@@ -190,11 +195,29 @@ void gpsMonitorTask(void *parameter) {
                 point.altitudeMeters = altitudeMeters;
                 point.speedKmph = speedKmph;
                 point.hdop = hdop;
+                fieldRecord.uptimeMs = now;
+                fieldRecord.sequence = point.sequence;
+                fieldRecord.satellites = point.satellites;
+                fieldRecord.utcYear = point.utcYear;
+                fieldRecord.utcMonth = point.utcMonth;
+                fieldRecord.utcDay = point.utcDay;
+                fieldRecord.utcHour = point.utcHour;
+                fieldRecord.utcMinute = point.utcMinute;
+                fieldRecord.utcSecond = point.utcSecond;
+                fieldRecord.utcCentisecond = point.utcCentisecond;
+                fieldRecord.utcValid = point.utcValid;
+                fieldRecord.latitude = point.latitude;
+                fieldRecord.longitude = point.longitude;
+                fieldRecord.altitudeMeters = point.altitudeMeters;
+                fieldRecord.speedKmph = point.speedKmph;
+                fieldRecord.hdop = point.hdop;
+                capturedTrackPoint = true;
                 gpsTrackNext = (gpsTrackNext + 1) % kGpsTrackCapacity;
                 if (gpsTrackCount < kGpsTrackCapacity) gpsTrackCount++;
                 gpsTrackLastCaptureMs = now;
             }
             portEXIT_CRITICAL(&gpsLiveMux);
+            if (capturedTrackPoint) heltecFieldLoggerRecordGps(fieldRecord);
             lastSnapshotMs = now;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -236,7 +259,9 @@ void drawWebUiPage() {
                         : statusPage == 1 ? "BRUCE WEBUI LOGIN"
                         : statusPage == 2 ? "HELTEC LIVE GPS"
                         : statusPage == 3 ? "HELTEC LORA RX"
-                                          : "HELTEC HARDWARE";
+                        : statusPage == 4 ? "HELTEC HARDWARE"
+                        : statusPage == 5 ? "UNIFIED FIELD LOG"
+                                          : "MARAUDER WIFI";
     drawLine(11, title);
     oled.drawHLine(0, 14, 128);
     if (statusPage == 1) {
@@ -314,7 +339,39 @@ void drawWebUiPage() {
                 ? oledActionMessage
                 : (batteryMv > 2500 ? "Battery: " + String(batteryMv) + "mV" : "Battery: not found")
         );
-        drawLine(63, "Tap>Net Hold2s>sleep");
+        drawLine(63, "Tap>Log Hold2s>sleep");
+    } else if (statusPage == 5) {
+        const HeltecFieldLogSnapshot fieldLog = heltecFieldLoggerSnapshot();
+        drawLine(
+            27,
+            String("Log: ") + (fieldLog.active ? "ACTIVE" : "off") +
+                (fieldLog.autoResume ? " Auto:on" : " Auto:off")
+        );
+        drawLine(39, "G " + String(fieldLog.gpsFixes) + " B " + String(fieldLog.bleObservations) +
+                         " W " + String(fieldLog.wifiObservations));
+        drawLine(
+            51,
+            hasOledActionMessage(5)
+                ? oledActionMessage
+                : "U B" + String(fieldLog.uniqueBleDevices) + " W" +
+                      String(fieldLog.uniqueWifiNetworks) + " S" + String(fieldLog.sessionId)
+        );
+        drawLine(63, "Tap>WiFi Hold>toggle");
+    } else if (statusPage == 6) {
+        const HeltecMarauderWifiSnapshot survey = heltecMarauderWifiSnapshot();
+        drawLine(27, String("Survey: ") + (survey.scanning ? "SCANNING" : "idle"));
+        drawLine(
+            39,
+            "APs " + String(survey.networkCount) + "/64 Scan " + String(survey.scansCompleted)
+        );
+        drawLine(
+            51,
+            hasOledActionMessage(6)
+                ? oledActionMessage
+                : (survey.lastError.length() > 0 ? survey.lastError.substring(0, 21)
+                                                 : "Passive / no TX")
+        );
+        drawLine(63, "Tap>Net Hold>scan");
     } else if (webUiApMode) {
         drawLine(29, "WiFi: " + bruceConfig.wifiAp.ssid);
         drawLine(41, "Pass: " + bruceConfig.wifiAp.pwd);
@@ -521,6 +578,12 @@ String heltecV4HardwareStatusJson() {
     doc["gps"]["track"]["count"] = trackCount;
     doc["gps"]["track"]["capacity"] = kGpsTrackCapacity;
     doc["gps"]["track"]["minimumIntervalMs"] = kGpsTrackMinimumIntervalMs;
+#if !defined(LITE_VERSION)
+    doc["ble"]["apiEnabled"] = isBLEAPIEnabled();
+    doc["ble"]["advertising"] = bleApiAdvertising();
+    doc["ble"]["connectedClients"] = bleApiConnectedClients();
+    doc["ble"]["connectionCount"] = bleApiConnectionCount();
+#endif
     if (live.lastFixMs > 0) {
         doc["gps"]["live"]["latitude"] = live.latitude;
         doc["gps"]["live"]["longitude"] = live.longitude;
@@ -634,6 +697,10 @@ bool heltecV4SetGpsMonitor(bool enabled) {
     return true;
 }
 
+bool heltecV4GpsMonitorActive() {
+    return gpsMonitorTaskHandle != nullptr && !gpsMonitorStopRequested;
+}
+
 void heltecV4PrepareGpsForExclusiveUse() {
     gpsExclusiveUse = true;
     gpsMonitorStopRequested = true;
@@ -653,6 +720,8 @@ void _setBrightness(uint8_t brightval) { (void)brightval; }
 
 void InputHandler(void) {
     checkPowerSaveTime();
+    heltecFieldLoggerPoll();
+    heltecMarauderWifiPoll();
     PrevPress = false;
     NextPress = false;
     SelPress = false;
@@ -697,6 +766,8 @@ void InputHandler(void) {
                 setOledActionMessage(2, "GPS busy");
             } else if (gpsMonitorTaskHandle && gpsMonitorStopRequested) {
                 setOledActionMessage(2, "GPS stopping");
+            } else if (gpsMonitorTaskHandle && heltecFieldLoggerUsesGps()) {
+                setOledActionMessage(2, "Field log owns GPS");
             } else {
                 const bool enable = gpsMonitorTaskHandle == nullptr;
                 ok = heltecV4SetGpsMonitor(enable);
@@ -739,6 +810,29 @@ void InputHandler(void) {
             setOledActionMessage(4, "Release to sleep");
             drawWebUiPage();
             lastLiveRefreshMs = millis();
+        } else if (statusPage == 5) {
+            longPressHandled = true;
+            const bool wasActive = heltecFieldLoggerIsActive();
+            const bool ok = wasActive ? heltecFieldLoggerStop()
+                                      : heltecFieldLoggerStart(true, true, true, true);
+            setOledActionMessage(
+                5,
+                ok ? (wasActive ? "Log stopped" : "Log started") : "Log action failed"
+            );
+            Serial.printf(
+                "[HELTEC] OLED field logger %s: %s\n",
+                wasActive ? "stop" : "start",
+                ok ? "ok" : "failed"
+            );
+            drawWebUiPage();
+            lastLiveRefreshMs = millis();
+        } else if (statusPage == 6) {
+            longPressHandled = true;
+            const bool ok = heltecMarauderWifiRequestScan();
+            setOledActionMessage(6, ok ? "Scan requested" : "Survey busy");
+            Serial.printf("[UNIFIED] OLED passive WiFi survey: %s\n", ok ? "queued" : "busy");
+            drawWebUiPage();
+            lastLiveRefreshMs = millis();
         }
     }
 
@@ -765,6 +859,7 @@ void InputHandler(void) {
 }
 
 void powerOff() {
+    heltecFieldLoggerSuspendForSleep();
     oled.setPowerSave(1);
     digitalWrite(LORA_FEM_TX, LOW);
     digitalWrite(LORA_FEM_ENABLE, LOW);

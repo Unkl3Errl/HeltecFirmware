@@ -21,10 +21,6 @@ public:
         String user;
         String pwd;
     };
-    struct QrCodeEntry {
-        String menuName;
-        String content;
-    };
     struct EvilPortalEndpoints {
         String getCredsEndpoint;
         String setSsidEndpoint;
@@ -42,8 +38,6 @@ public:
     float tmz = 0;
     bool dst = false;
     bool clock24hr = true;
-    int soundEnabled = 1;
-    int soundVolume = 100;
     int wifiAtStartup = 0;
     int instantBoot = 0;
     String keyboardLang = "QWERTY"; // "QWERTY" | "AZERTY" | "QWERTZ"
@@ -77,9 +71,6 @@ public:
         saveFile(); // opcional, para salvar imediatamente
     }
 
-    // RFID
-    std::set<String> mifareKeys = {};
-
     // Misc
     String startupApp = "";
     String startupAppJSInterpreterFile = "";
@@ -92,13 +83,6 @@ public:
     bool badUSBBLEShowOutput = true;
 
     std::vector<String> disabledMenus = {};
-
-    std::vector<QrCodeEntry> qrCodes = {
-        {"Bruce AP",   "WIFI:T:WPA;S:BruceNet;P:brucenet;;"},
-        {"Bruce Wiki", "https://github.com/pr3y/Bruce/wiki"},
-        {"Bruce Site", "https://bruce.computer"            },
-        {"Rickroll",   "https://youtu.be/dQw4w9WgXcQ"      }
-    };
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor
@@ -128,10 +112,6 @@ public:
     void validateTmzValue();
     void setDST(bool value);
     void setClock24Hr(bool value);
-    void setSoundEnabled(int value);
-    void setSoundVolume(int value);
-    void validateSoundEnabledValue();
-    void validateSoundVolumeValue();
     void setWifiAtStartup(int value);
     void validateWifiAtStartupValue();
 
@@ -156,8 +136,6 @@ public:
     void setWifiApCreds(const String &ssid, const String &pwd);
     void setTerminalLog(bool value);
     void addWifiCredential(const String &ssid, const String &pwd);
-    void addQrCodeEntry(const String &menuName, const String &content);
-    void removeQrCodeEntry(const String &menuName);
     String getWifiPassword(const String &ssid) const;
     void addEvilWifiName(String value);
     void removeEvilWifiName(String value);
@@ -172,10 +150,6 @@ public:
     void validateEvilEndpointSsid();
     void validateEvilPasswordMode();
     void validateEvilGatewayIp();
-
-    // RFID
-    void addMifareKey(String value);
-    void validateMifareKeysItems();
 
     // Misc
     void setStartupApp(String value);

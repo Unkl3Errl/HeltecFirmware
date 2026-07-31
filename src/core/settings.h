@@ -50,14 +50,6 @@ void setEvilPasswordMode();
 
 void setEvilGatewayIp();
 
-void setRFModuleMenu();
-
-void setRFFreqMenu();
-
-void setRFIDModuleMenu();
-
-void addMifareKeyMenu();
-
 void setSleepMode();
 
 void setDimmerTimeMenu();
@@ -65,20 +57,6 @@ void setDimmerTimeMenu();
 void setClock();
 
 void runClockLoop(bool showMenuHint = false);
-
-int gsetIrTxPin(bool set = false);
-
-void setIrTxRepeats();
-
-int gsetIrRxPin(bool set = false);
-
-int gsetRfTxPin(bool set = false);
-
-int gsetRfRxPin(bool set = false);
-
-void setSoundConfig();
-
-void setSoundVolume();
 
 #ifdef HAS_RGB_LED
 void setLedBlinkConfig();
@@ -109,6 +87,10 @@ void setMacAddressMenu();
 
 #if !defined(LITE_VERSION)
 void enableBLEAPI();
+bool isBLEAPIEnabled();
+uint32_t bleApiConnectionCount();
+uint8_t bleApiConnectedClients();
+bool bleApiAdvertising();
 
 bool appStoreInstalled();
 

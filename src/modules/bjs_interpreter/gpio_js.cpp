@@ -177,8 +177,6 @@ JSValue native_pins(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) 
     JS_SetPropertyStr(ctx, obj, "spi_mosi", JS_NewInt32(ctx, SPI_MOSI_PIN));
     JS_SetPropertyStr(ctx, obj, "spi_miso", JS_NewInt32(ctx, SPI_MISO_PIN));
     JS_SetPropertyStr(ctx, obj, "spi_ss", JS_NewInt32(ctx, SPI_SS_PIN));
-    JS_SetPropertyStr(ctx, obj, "ir_tx", JS_NewInt32(ctx, TXLED));
-    JS_SetPropertyStr(ctx, obj, "ir_rx", JS_NewInt32(ctx, RXLED));
     return obj;
 }
 #endif

@@ -7,7 +7,6 @@
 #include "core/utils.h"
 #include "core/wifi/wifi_common.h"
 #include "fastpair_crypto.h"
-#include "modules/NRF24/nrf_jammer_api.h"
 #include <SD.h>
 #include <esp_heap_caps.h>
 #include <globals.h>
@@ -1575,7 +1574,7 @@ bool DuckyScriptEngine::parseLine(String line) {
     line.trim();
     if (line.length() == 0 || line.startsWith("//") || line.startsWith("REM")) return true;
 
-    DuckyCommand cmd;
+    BLEDuckyCommand cmd;
     if (line.startsWith("DELAY ")) {
         cmd.command = "DELAY";
         cmd.parameter = line.substring(6);
@@ -1686,7 +1685,7 @@ bool DuckyScriptEngine::loadFromString(String script) {
     return true;
 }
 
-std::vector<DuckyCommand> DuckyScriptEngine::getCommands() { return commands; }
+std::vector<BLEDuckyCommand> DuckyScriptEngine::getCommands() { return commands; }
 bool DuckyScriptEngine::isLoaded() { return scriptLoaded; }
 void DuckyScriptEngine::clear() {
     commands.clear();
@@ -1885,12 +1884,12 @@ bool HIDDuckyService::executeDuckyScript(NimBLEAddress target) {
     }
 
     showAttackProgress("Executing Ducky Script...", TFT_BLUE);
-    std::vector<DuckyCommand> commands = duckyEngine.getCommands();
+    std::vector<BLEDuckyCommand> commands = duckyEngine.getCommands();
     bool success = true;
     int currentDelay = defaultDelay;
 
     for (size_t i = 0; i < commands.size(); i++) {
-        DuckyCommand cmd = commands[i];
+        BLEDuckyCommand cmd = commands[i];
         if (i % 5 == 0)
             showAttackProgress(
                 String("Executing command " + String(i + 1) + "/" + String(commands.size())).c_str(), TFT_BLUE
@@ -2002,12 +2001,12 @@ bool HIDDuckyService::forceInjectDuckyScript(
     }
 
     showAttackProgress("Executing Ducky Script...", TFT_BLUE);
-    std::vector<DuckyCommand> commands = duckyEngine.getCommands();
+    std::vector<BLEDuckyCommand> commands = duckyEngine.getCommands();
     bool success = true;
     int currentDelay = defaultDelay;
 
     for (size_t i = 0; i < commands.size(); i++) {
-        DuckyCommand cmd = commands[i];
+        BLEDuckyCommand cmd = commands[i];
 
         if (cmd.command == "DELAY") delay(cmd.delay_ms);
         else if (cmd.command == "DEFAULT_DELAY") currentDelay = cmd.delay_ms;
@@ -2310,90 +2309,6 @@ bool MultiConnectionAttack::advertisingSpam(std::vector<NimBLEAddress> targets) 
     cleanup.disable();
     showAttackResult(true, String("Sent " + String(spamCount) + " spam advertisements").c_str());
     return true;
-}
-
-bool MultiConnectionAttack::nrf24JamAttack(int jamMode) {
-    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-
-    if (!confirmAttack("Jam BLE frequencies? This may disrupt nearby devices.")) return false;
-    showAttackProgress("Initializing NRF24 for BLE jamming...", TFT_WHITE);
-
-    if (!isNRF24Available()) {
-        showAttackResult(false, "NRF24 module not available");
-        return false;
-    }
-
-    BLEJamMode bleMode;
-    switch (jamMode) {
-        case 0: bleMode = BLE_JAM_ADV_CHANNELS; break;
-        case 1: bleMode = BLE_JAM_HOP_ADV; break;
-        case 2: bleMode = BLE_JAM_HOP_ALL; break;
-        default: bleMode = BLE_JAM_ADV_CHANNELS;
-    }
-
-    showAttackProgress("Starting BLE jamming attack...", TFT_ORANGE);
-    bool success = startBLEJammer(bleMode);
-
-    if (success) {
-        std::vector<String> lines = {
-            "BLE JAMMER ACTIVE",
-            "Mode: " + String(
-                           bleMode == BLE_JAM_ADV_CHANNELS ? "Advertising Channels"
-                           : bleMode == BLE_JAM_HOP_ADV    ? "Hopping Adv Channels"
-                           : bleMode == BLE_JAM_HOP_ALL    ? "Hopping All BLE Channels"
-                                                           : "Unknown"
-                       ),
-            "",
-            "Jamming BLE frequencies",
-            "Press any key to stop..."
-        };
-        showDeviceInfoScreen("BLE JAMMER", lines, TFT_ORANGE, TFT_WHITE);
-        stopBLEJammer();
-        cleanup.disable();
-        showAttackResult(true, "BLE jamming stopped");
-        return true;
-    }
-    showAttackResult(false, "Failed to start BLE jamming");
-    return false;
-}
-
-bool MultiConnectionAttack::jamAndConnect(NimBLEAddress target) {
-    AutoCleanup cleanup([]() { BLEStateManager::deinitBLE(true); });
-
-    if (!confirmAttack("Jam BLE while attempting exploit connection?")) return false;
-    showAttackProgress("Jam & Connect attack starting...", TFT_ORANGE);
-
-    bool jamStarted = jamBLEAdvertisingChannels();
-    if (!jamStarted) {
-        showAttackResult(false, "Failed to start jamming");
-        return false;
-    }
-
-    delay(300);
-    showAttackProgress("Jamming active - attempting connection...", TFT_YELLOW);
-
-    String connectionMethod = "";
-    NimBLEClient *pClient = attemptConnectionWithStrategies(target, connectionMethod);
-    stopBLEJammer();
-    delay(200);
-
-    if (pClient) {
-        BLEStateManager::registerClient(pClient);
-        showAttackProgress("Connected! Testing for exploit...", TFT_GREEN);
-        WhisperPairExploit exploit;
-        bool exploitSuccess = exploit.executeSilent(target);
-
-        pClient->disconnect();
-        BLEStateManager::unregisterClient(pClient);
-        NimBLEDevice::deleteClient(pClient);
-        cleanup.disable();
-
-        if (exploitSuccess) showAttackResult(true, "Jam & Connect exploit successful!");
-        else showAttackResult(true, "Connected but exploit failed");
-        return true;
-    }
-    showAttackResult(false, "Jam & Connect attack failed");
-    return false;
 }
 
 void MultiConnectionAttack::cleanup() {
@@ -3923,18 +3838,18 @@ static bool welcomeShown = false;
 void showWelcomeScreen() {
     if (welcomeShown) return;
 
-    tft.fillScreen(TFT_GRAY);
+    tft.fillScreen(TFT_DARKGREY);
     tft.setTextSize(3);
-    tft.setTextColor(TFT_PURPLE, TFT_GRAY);
+    tft.setTextColor(TFT_PURPLE, TFT_DARKGREY);
     tft.setCursor((tftWidth - tft.textWidth("BRUCE")) / 2, 40);
     tft.print("BRUCE");
 
-    tft.setTextColor(TFT_BLUE, TFT_GRAY);
+    tft.setTextColor(TFT_BLUE, TFT_DARKGREY);
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 90);
     tft.print("BLE SUITE");
 
-    tft.setTextColor(TFT_GREEN, TFT_GRAY);
+    tft.setTextColor(TFT_GREEN, TFT_DARKGREY);
     tft.setTextSize(1);
     tft.setCursor((tftWidth - tft.textWidth("v2.0b")) / 2, 130);
     tft.print("v2.0b");
@@ -4415,21 +4330,17 @@ void showMemorySubMenu(NimBLEAddress target) {
 }
 
 void showDoSSubMenu(NimBLEAddress target) {
-    const char *options[] = {
-        "Connection Flood", "Advertising Spam", "Jam & Connect (NRF24)", "Protocol Fuzzer"
-    };
+    const char *options[] = {"Connection Flood", "Advertising Spam", "Protocol Fuzzer"};
 
-    int choice = showSubMenu("DoS Attacks", options, 4);
+    int choice = showSubMenu("DoS Attacks", options, 3);
     if (choice == -1) return;
 
     DoSAttackServiceClass dos;
-    MultiConnectionAttack multi;
 
     switch (choice) {
         case 0: dos.connectionFlood(target); break;
         case 1: dos.advertisingSpam(target); break;
-        case 2: multi.jamAndConnect(target); break;
-        case 3: runProtocolFuzzer(target); break;
+        case 2: runProtocolFuzzer(target); break;
     }
 }
 

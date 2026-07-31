@@ -21,25 +21,37 @@ upstream branch on July 18, 2026.
 - V4 RF front end: power GPIO 7, enable GPIO 2, TX/RX direction GPIO 5
 - US915 default LoRa frequency: 915 MHz (editable in LoRa settings)
 - GNSS connector: ESP RX 39, ESP TX 38, power control 34 (active low), reset 42, PPS 41, wake 40
-- WebUI startup mode
+- WebUI startup mode with direct `BruceNet` AP initialization (no preceding
+  station scan)
 - Authenticated WebUI hardware panel with live GPS monitoring and receive-only
   LoRa controls plus a constrained transmitter
+- Unified, receive-only Marauder Wi-Fi survey with an asynchronous 64-network
+  result list. Automatic scans begin only after a 30-second boot grace, run at
+  most every 15 seconds while Wi-Fi field logging is active, and leave the
+  BruceNet radio in stable AP+STA mode after the first survey.
 - Bounded GPS fix track with JSON and GPX downloads
 - Bounded recent LoRa receive history with signal metrics and JSON download
-- OLED boot screen plus network, login, live GPS, live LoRa RX, and hardware
-  status pages
-- PRG button cycles through all five OLED dashboard pages
+- Reset-resistant LittleFS field logger for incremental onboard/Android GPS
+  fixes and passive BLE/Wi-Fi observations, with optional automatic resume
+  after a reset
+- OLED boot screen plus network, login, live GPS, live LoRa RX, passive Wi-Fi,
+  hardware, and field-log status pages
+- PRG button cycles through all seven OLED dashboard pages
 - Holding PRG on the GPS or LoRa page toggles GPS monitoring or receive-only
   LoRa listening
+- Holding PRG on the field-log page starts or stops a GPS+BLE+Wi-Fi log with
+  automatic reset resume enabled
 - Holding PRG for two seconds on the hardware page enters deep sleep after the
   button is released; pressing PRG wakes the board
 - Deep-sleep wake using the PRG/BOOT button on GPIO 0
+- A Heltec-only main menu that excludes unsupported accessory categories
 
 The onboard 128x64 SSD1306 OLED shows boot progress, WebUI connection details,
 live GPS state and counters, receive-only LoRa state, packet count, frequency,
-last-packet RSSI/SNR and a payload preview, and passive hardware diagnostics.
+last-packet RSSI/SNR and a payload preview, passive Wi-Fi survey state, passive
+hardware diagnostics, and field-log session/counter status.
 Short PRG presses cycle pages; a 0.9-second
-hold on the GPS or LoRa page toggles that service. Bruce's complete graphical
+hold on the GPS, LoRa, or field-log page toggles that service. Bruce's complete graphical
 menu remains in the WebUI because it targets color TFT drivers and multi-button
 navigation. A two-second hold on the hardware page enters deep sleep after PRG
 is released.
@@ -47,6 +59,14 @@ is released.
 The onboard SX1262 pin mapping, V4 RF front-end controls, and default radio type
 are compiled in. Attach the correct antenna before using the radio and configure
 a legal frequency and transmit power for your region.
+
+The onboard SX1262 is exposed through **LoRa**, not Bruce's generic **RF**
+category. The generic Sub-GHz/CC1101, NRF24, RFID/NFC, infrared, external
+Ethernet, FM, iButton, audio, microphone, QR/TFT rendering, and Megalodon
+stacks are fully removed from source selection, serial commands, JavaScript
+bindings, configuration, bundled assets, and dependencies. SD remains only as
+the shared filesystem abstraction used by LittleFS-aware code; the Heltec
+target has no SD-card menu entry or configured SD pins.
 
 Leaving LoRa chat now puts the SX1262 to sleep, closes its dedicated SPI bus,
 and powers down the RF front end. Deep sleep also disables the RF front end,
@@ -56,7 +76,7 @@ boot diagnostics.
 ## Hardware validation
 
 The firmware performs passive boot diagnostics without transmitting an RF
-packet. Press PRG twice from the WebUI network page to show the hardware page.
+packet. Press PRG four times from the WebUI network page to show the hardware page.
 Authenticated WebUI sessions can also read the same machine-readable status at
 `/api/heltec/status`.
 
@@ -67,9 +87,9 @@ browser:
 
 - The panel reports firmware identity, uptime, heap/PSRAM health, and provides a
   combined JSON diagnostic download assembled from the authenticated hardware,
-  GPS track, LoRa status, and LoRa history routes. The snapshot contains no
+  GPS track, LoRa status/history, and field-log status/file-list routes. The snapshot contains no
   WebUI credentials or session token. Because the AP MAC, retained GPS
-  coordinates, and LoRa payloads can be present, the browser shows a privacy
+  coordinates, LoRa payloads, and field-log metadata can be present, the browser shows a privacy
   confirmation before saving the file.
 - Authenticated status also identifies the active WebUI access point by SSID,
   IPv4 address, channel, connected-client count, and AP MAC address. It never
@@ -94,12 +114,45 @@ browser:
   sends 1–64 printable ASCII bytes at the active frequency with fixed 2 dBm
   output, requires a browser confirmation for every packet, and enforces a
   five-second cooldown before another WebUI transmission.
+- **Marauder passive Wi-Fi survey** performs receive-only infrastructure scans
+  and retains up to 64 networks with BSSID, SSID, authentication, RSSI, channel,
+  and hidden-network state. Bruce owns the AP and WebUI throughout: a scan may
+  add the idle STA interface but never tears the radio back down to AP-only.
+- **Reset-resistant field log** independently enables GPS fixes, passive BLE
+  observations, passive Wi-Fi observations, and automatic resume. Each
+  observation is serialized as one
+  newline-terminated JSON object, flushed, and closed immediately. A reset can
+  therefore affect only the record being written. If the prior segment lacks a
+  final newline, boot preserves it, starts the next numbered segment, writes a
+  `tail_recovery` record, rebuilds the session counters from all complete
+  records, and resumes the selected services. BLE scanning is passive; a device
+  is recorded at most once per minute, and a GPS position is attached when a fix
+  is no more than 30 seconds old. Logging stops before LittleFS free space falls
+  below the 256 KiB reserve.
+- **Android GPS assist** accepts authenticated fixes only while an active field
+  log has GPS enabled. Records identify `source: "android"`, provider, source
+  time, and optional accuracy, altitude, and speed so consumers can distinguish
+  them from onboard GNSS fixes.
+- Saved `session-NNNNNN-SSS.ndjson` segments are listed and downloaded through
+  authenticated routes. A segment marked **interrupted tail** contains valid
+  newline-delimited records followed by the preserved partial write; consumers
+  must ignore that final non-terminated fragment. Downloads require a browser
+  privacy confirmation because records can contain precise coordinates, BLE
+  addresses, and broadcast device names. The WebUI does not offer deletion, so
+  stored evidence is never removed by an accidental control click.
 
-These controls require the normal WebUI session cookie. Their endpoints are
+These controls require the normal WebUI session cookie. Unified discovery uses
+`GET /api/heltec/capabilities`, `GET /api/heltec/wifi`,
+`GET /api/heltec/wifi/results`, and `POST /api/heltec/wifi`. Android-assisted
+location uses `POST /api/heltec/fieldlog/phone-gps`. The remaining endpoints are
 `POST /api/heltec/gps`, `GET|POST /api/heltec/gps/history`,
 `GET|POST /api/heltec/lora`,
 `GET|POST /api/heltec/lora/history`, `POST /api/heltec/lora/transmit`, and
-`GET /api/heltec/status`. The authenticated reboot endpoint is `POST /reboot`;
+`GET /api/heltec/status`. Field logging uses `GET|POST /api/heltec/fieldlog`,
+`GET /api/heltec/fieldlog/files`, and
+`GET /api/heltec/fieldlog/download?name=...`. Starting accepts `gps`, `ble`,
+`wifi`, and `autoResume` booleans; stopping requires `action=stop`. The
+authenticated reboot endpoint is `POST /reboot`;
 it requires `action=restart` and the literal confirmation field `RESTART`. The
 history POST only accepts `action=clear`. The transmit endpoint additionally
 requires the literal confirmation field `TRANSMIT`.
@@ -115,6 +168,21 @@ responsible for choosing a frequency and usage pattern permitted in their
 location. Boot diagnostics and OLED controls never transmit.
 
 Validated on the target board:
+
+- Unified Bruce/Marauder application-only update flashed and hash-verified on
+  ESP32-S3 MAC `8c:fd:49:b6:8c:14` while preserving NVS and LittleFS.
+- An active GPS+BLE+Wi-Fi session recovered automatically across eight reset
+  markers. Android rejoined BruceNet and re-authenticated without another
+  approval prompt after a controlled reset.
+- The final Android-exported session contained 1,379 complete records: 600
+  Wi-Fi observations, 738 BLE observations, 31 Android GPS fixes, eight
+  `session_resume` records, one `session_start`, and one terminal
+  `session_stop`. Offline validation found zero interrupted tails; 48 Wi-Fi and
+  57 BLE records carried a recent phone location.
+- Automatic passive scans retained 14 of the 64 available result slots while
+  two WebUI clients remained connected. The complete authenticated regression
+  passed afterward with BruceNet in AP+STA mode and the LoRa transmit counter
+  unchanged at zero.
 
 - SX1262 SPI initialization and receive-mode entry: RadioLib status `0`
   (`RADIOLIB_ERR_NONE`)
@@ -142,6 +210,31 @@ Validated on the target board:
 - Live AP telemetry matched the test connection: SSID `BruceNet`, IPv4 address
   `172.0.0.1`, channel 6, and one connected client; the reported AP MAC matched
   the original board identity
+- A GPS+BLE field-log session survived an authenticated software reset without
+  changing its session or segment. The board reconstructed its counters and
+  continued passive scanning, then produced a clean 14,424-byte segment with
+  75 complete records: one `session_start`, 72 BLE observations representing
+  31 unique addresses, one `session_resume`, and one `session_stop`.
+- A second BLE-only lifecycle produced 16 observations and a clean stop. Free
+  heap measured 97,008 bytes before scanning, 24,676 bytes while the scanner was
+  active, and 96,800 bytes after the logger-owned NimBLE instance was released,
+  leaving only a 208-byte difference from baseline.
+- Both downloaded field-log segments passed the host validator: 93 complete
+  NDJSON records across two sessions, no interrupted tails, and byte sizes that
+  exactly matched the authenticated file-list API. The served WebUI contained
+  the logger controls and authenticated download support.
+- After a firmware upload reset the Preferences high-water mark while LittleFS
+  retained sessions 1 and 2, boot reconstructed session 2 from the stored file
+  names and allocated session 3 for the next run. All three resulting segments
+  passed validation with 117 complete records and no interrupted tails, proving
+  upgrades cannot silently append a new session to an existing filename.
+- After removing the generic startup station scan, `BruceNet` advertised and
+  accepted the Mac connection immediately after each flash without a serial
+  Wi-Fi recycle.
+- A final 30-second passive soak of the release candidate completed 14 samples
+  with no reboot, session/state change, or LoRa transmission. Free heap remained
+  at 97,344 bytes, free PSRAM stayed within 2,050,872–2,051,280 bytes, and the
+  slowest request cycle took 0.205 seconds.
 - A 120-second passive WebUI soak completed 57 four-endpoint samples without a
   reboot, session loss, identity/state/history change, or RF counter change.
   Free heap stayed within 97,396–97,760 bytes, free PSRAM within
@@ -194,8 +287,8 @@ python3 boards/heltec-wifi-lora-32-v4/validate_webui.py
 ```
 
 The test verifies authentication, firmware and memory health, the combined
-diagnostic snapshot contract, bounded GPS and LoRa histories, route separation,
-frequency bounds, and an unchanged transmit counter. It never supplies a LoRa
+diagnostic snapshot contract, bounded GPS and LoRa histories, field-log status
+and file-list safety, route separation, frequency bounds, and an unchanged transmit counter. It never supplies a LoRa
 payload or the literal `TRANSMIT` confirmation, so it does not intentionally
 emit an RF packet.
 
@@ -205,6 +298,14 @@ For a sustained passive reliability check, add a soak duration:
 python3 -u boards/heltec-wifi-lora-32-v4/validate_webui.py --soak-seconds 120
 ```
 
-Soak mode repeatedly checks the authenticated hardware, GPS, and LoRa routes.
+Soak mode repeatedly checks the authenticated hardware, GPS, LoRa, and field-log routes.
 It fails on a reboot or session loss, low memory, changed AP identity, unexpected
 GPS/LoRa state or history, or a changed LoRa transmit counter.
+
+Validate downloaded NDJSON segments, or exercise the built-in interrupted-tail
+fixture, with:
+
+```sh
+python3 boards/heltec-wifi-lora-32-v4/validate_field_log.py session-*.ndjson
+python3 boards/heltec-wifi-lora-32-v4/validate_field_log.py --self-test
+```

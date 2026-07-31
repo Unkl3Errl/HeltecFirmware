@@ -250,15 +250,12 @@ void GPSTracker::add_coord() {
 
 void GPSTracker::releasePins() {
     rxPinReleased = false;
-    if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
+    if (
 #if !defined(LITE_VERSION)
-        bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
         bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
-        // T-Embed CC1101 and T-Display S3 Touch ties this pin to the NRF24 CS; switch it to input so the GPS
-        // UART can drive it.
+        // Release a shared peripheral pin so the GPS UART can drive it.
         pinMode(bruceConfigPins.gps_bus.rx, INPUT);
         rxPinReleased = true;
     }
@@ -266,28 +263,20 @@ void GPSTracker::releasePins() {
 
 void GPSTracker::restorePins() {
     if (rxPinReleased) {
-        if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
-            bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
+        if (
 #if !defined(LITE_VERSION)
-            bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
             bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
             bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
             // Restore the original board state after leaving the GPS app s
             // o the radio/other peripherals behave as expected
             pinMode(bruceConfigPins.gps_bus.rx, OUTPUT);
-            if (bruceConfigPins.gps_bus.rx == bruceConfigPins.CC1101_bus.cs ||
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.NRF24_bus.cs ||
-#if !defined(LITE_VERSION)
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
-#endif
+            if (
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.SDCARD_bus.cs) {
                 // If it is conflicting to an SPI CS pin, keep it HIGH
                 digitalWrite(bruceConfigPins.gps_bus.rx, HIGH);
             } else {
                 // If it is conflicting with any other SPI pin, keep it LOW
-                // Avoids CC1101 Jamming and nRF24 radio to keep enabled
                 digitalWrite(bruceConfigPins.gps_bus.rx, LOW);
             }
         }

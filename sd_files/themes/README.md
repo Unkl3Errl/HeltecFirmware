@@ -16,9 +16,7 @@ The recommended height of the images is:
 
 | Device | Display size | Height |
 | --- | --- | --- |
-| T-Embed | 320x170 | 140px |
-| Compact display | 240x135 | 105px |
-| Core / CYD | 320x240 | 180 |
+| Heltec WebUI navigator | 240x135 | 105px |
 
 ## Theme file
 Theme settings are stored in a **.json** file, following this structure:
@@ -26,13 +24,8 @@ Theme settings are stored in a **.json** file, following this structure:
 {
   "wifi":"wifi.png",
   "ble":"ble.png",
-  "rf":"rf.png",
-  "rfid":"rfid.png",
-  "fm":"fm.png",
-  "ir":"ir.png",
   "files":"files.png",
   "gps":"gps.png",
-  "nrf":"nrf.png",
   "interpreter":"interpreter.png",
   "clock":"clock.png",
   "others":"others.png",
@@ -44,7 +37,6 @@ Theme settings are stored in a **.json** file, following this structure:
   "border":0,
   "label":0,
   "boot_img":"boot.gif",
-  "boot_sound":"boot.wav",
   "ledBright": 100,
   "ledColor": "960064",
   "ledEffect": 0,
@@ -62,4 +54,3 @@ You can use [Bruce Theme Builder](https://bruce.computer/build_theme.html) to se
 
 ## Setting a Theme
 Config > UI Theme > (Choose FS) > select the .json file and the theme will be set.
-

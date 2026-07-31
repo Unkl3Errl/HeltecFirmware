@@ -28,7 +28,6 @@ void ConfigMenu::optionsMenu() {
 #ifdef HAS_RGB_LED
             {"LED Config",    [this]() { ledMenu(); }      },
 #endif
-            {"Audio Config",  [this]() { audioMenu(); }    },
             {"System Config", [this]() { systemMenu(); }   },
             {"Power",         [this]() { powerMenu(); }    },
         };
@@ -117,38 +116,6 @@ void ConfigMenu::ledMenu() {
     }
 }
 #endif
-/*********************************************************************
-**  Function: audioMenu
-**  Audio configuration submenu with auto-rebuild for toggles
-**********************************************************************/
-void ConfigMenu::audioMenu() {
-    while (true) {
-        std::vector<Option> localOptions = {
-#if !defined(LITE_VERSION)
-#if defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR)
-
-            {String("Sound: ") + (bruceConfig.soundEnabled ? "ON" : "OFF"),
-                                                             [this]() {
-                 // Toggle sound setting
-                 bruceConfig.soundEnabled = !bruceConfig.soundEnabled;
-                 bruceConfig.saveFile();
-             }                                                                                                                                            },
-#if defined(HAS_NS4168_SPKR)
-            {"Sound Volume",                                                [this]() { setSoundVolume(); }},
-#endif  // BUZZ_PIN || HAS_NS4168_SPKR
-#endif  //  HAS_NS4168_SPKR
-#endif  //  LITE_VERSION
-            {"Back",                                                        []() {}                       },
-        };
-
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Audio Config");
-
-        // Exit only if user pressed Back or ESC
-        if (selected == -1 || selected == localOptions.size() - 1) { return; }
-        // Menu rebuilds to update toggle label
-    }
-}
-
 /*********************************************************************
 **  Function: systemMenu
 **  System configuration submenu with auto-rebuild for toggles
@@ -262,13 +229,9 @@ void ConfigMenu::devMenu() {
     while (true) {
         std::vector<Option> localOptions = {
             {"I2C Finder",      [this]() { find_i2c_addresses(); }                      },
-            {"CC1101 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
-            {"NRF24  Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
 #if !defined(LITE_VERSION)
             {"LoRa Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
-            {"W5500 Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
 #endif
-            {"SDCard Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
             {"I2C Pins",        [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
             {"UART Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
             {"GPS Pins",        [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
@@ -310,14 +273,6 @@ void ConfigMenu::switchToUARTSerial() {
     if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
         sdcardSPI.end();
-    }
-
-    // Check and resolve CC1101/NRF24 pin conflicts
-    if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
-        bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.tx) ||
-        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
-        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
-        CC_NRF_SPI.end();
     }
 
     // Configure UART pins and switch serial output

@@ -6,7 +6,7 @@
 #include "core/wifi/wg.h"
 #include "core/wifi/wifi_common.h"
 #include "core/wifi/wifi_mac.h"
-#include "modules/ethernet/ARPScanner.h"
+#include "modules/wifi/ARPScanner.h"
 #include "modules/wifi/ap_info.h"
 #include "modules/wifi/clients.h"
 #include "modules/wifi/evil_portal.h"

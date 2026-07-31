@@ -4,14 +4,6 @@
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/gps/wdgwars.h"
 #include "modules/gps/wigle.h"
-#include "modules/ir/TV-B-Gone.h"
-#include "modules/ir/custom_ir.h"
-#include "modules/others/audio.h"
-#if defined(HAS_NS4168_SPKR)
-#include "modules/others/audio_player.h"
-#endif
-#include "modules/others/qrcode_menu.h"
-#include "modules/rf/rf_send.h"
 #include "mykeyboard.h" // using keyboard when calling rename
 #include "passwords.h"
 #include "scrollableTextArea.h"
@@ -39,57 +31,23 @@ bool setupSdCard() {
     // avoid unnecessary remounting
     if (sdcardMounted) return true;
     bool result = true;
-    bool task = false; // devices that doesn't use InputHandler task
-#ifdef USE_TFT_eSPI_TOUCH
-    task = true;
-#endif
 #ifdef USE_SD_MMC
     if (!SD.begin("/sdcard", true)) {
         sdcardMounted = false;
         result = false;
     }
 #else
-    // Not using InputHandler (SdCard on default &SPI bus)
-    if (task) {
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs)) result = false;
-        // Serial.println("Task not activated");
+    sdcardSPI.begin(
+        (int8_t)bruceConfigPins.SDCARD_bus.sck,
+        (int8_t)bruceConfigPins.SDCARD_bus.miso,
+        (int8_t)bruceConfigPins.SDCARD_bus.mosi,
+        (int8_t)bruceConfigPins.SDCARD_bus.cs
+    );
+    delay(10);
+    if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
+        result = false;
     }
-    // SDCard in the same Bus as TFT, in this case we call the SPI TFT Instance
-    else if (
-        bruceConfigPins.SDCARD_bus.mosi == (gpio_num_t)TFT_MOSI &&
-        bruceConfigPins.SDCARD_bus.mosi != GPIO_NUM_NC
-    ) {
-        Serial.println("SDCard in the same Bus as TFT, using TFT SPI instance");
-#if TFT_MOSI > 0 // condition for Headless and 8bit displays (no SPI bus)
-        if (!SD.begin(bruceConfigPins.SDCARD_bus.cs, tft.getSPIinstance())) {
-            result = false;
-            Serial.println("SDCard in the same Bus as TFT, but failed to mount");
-        }
-#else
-        goto NEXT; // destination for Headless and 8bit displays (no SPI bus)
-#endif
-
-    }
-    // If not using TFT Bus, use a specific bus
-    else {
-    NEXT:
-        sdcardSPI.begin(
-            (int8_t)bruceConfigPins.SDCARD_bus.sck,
-            (int8_t)bruceConfigPins.SDCARD_bus.miso,
-            (int8_t)bruceConfigPins.SDCARD_bus.mosi,
-            (int8_t)bruceConfigPins.SDCARD_bus.cs
-        ); // start SPI communications
-        delay(10);
-        if (!SD.begin((int8_t)bruceConfigPins.SDCARD_bus.cs, sdcardSPI)) {
-            result = false;
-#if defined(ARDUINO_M5STICK_C_PLUS) || defined(ARDUINO_M5STICK_C_PLUS2)
-            // If using Shared SPI, do not stop the bus if SDCard is not present
-            // If using Legacy, release the pins from this SPI Bus
-            if (bruceConfigPins.SDCARD_bus.miso != bruceConfigPins.CC1101_bus.miso) sdcardSPI.end();
-#endif
-        }
-        Serial.println("SDCard in a different Bus, using sdcardSPI instance");
-    }
+    Serial.println("SDCard using its configured SPI bus");
 #endif
 
     if (result == false) {
@@ -584,7 +542,7 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
     String Folder = rootPath;
     String PreFolder = rootPath;
     tft.drawPixel(0, 0, 0);
-    tft.fillScreen(bruceConfig.bgColor); // TODO: Does only the T-Embed CC1101 need this?
+    tft.fillScreen(bruceConfig.bgColor);
     tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
     if (&fs == &SD) {
         if (!setupSdCard()) {
@@ -763,24 +721,6 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                                              while (!check(AnyKeyPress))
                                                                  vTaskDelay(10 / portTICK_PERIOD_MS);
                                                          }});
-                    if (filepath.endsWith(".ir")) {
-                        options.insert(options.begin(), {"IR Choose cmd", [&]() {
-                                                             delay(200);
-                                                             chooseCmdIrFile(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
-                                                             delay(200);
-                                                             txIrFile(&fs, filepath);
-                                                         }});
-                    }
-                    if (filepath.endsWith(".sub"))
-                        options.insert(options.begin(), {"Subghz Tx", [&]() {
-                                                             delay(200);
-                                                             RfCodes data{};
-
-                                                             if (readSubFile(&fs, filepath, data))
-                                                                 txSubFile(data);
-                                                         }});
                     if (filepath.endsWith(".csv")) {
                         options.insert(options.begin(), {"Wigle Upload", [&]() {
                                                              delay(200);
@@ -857,23 +797,9 @@ String loopSD(FS &fs, bool filePicker, String allowed_ext, String rootPath) {
                                               }}
                         );
                     }
-#if defined(HAS_NS4168_SPKR)
-                    if (isAudioFile(filepath))
-                        options.insert(options.begin(), {"Play Audio", [&]() {
-                                                             delay(200);
-                                                             check(AnyKeyPress);
-                                                             // playAudioFile(&fs, filepath);
-                                                             musicPlayerUI(&fs, filepath);
-                                                         }});
-#endif
-                    // generate qr codes from small files (<3K)
+                    // Hash small files directly from the file menu.
                     size_t filesize = getFileSize(fs, filepath);
-                    // Serial.println(filesize);
                     if (filesize < SAFE_STACK_BUFFER_SIZE && filesize > 0) {
-                        options.push_back({"QR code", [&]() {
-                                               delay(200);
-                                               qrcode_display(readSmallFile(fs, filepath));
-                                           }});
                         options.push_back({"CRC32", [&]() {
                                                delay(200);
                                                displaySuccess(crc32File(fs, filepath), true);
