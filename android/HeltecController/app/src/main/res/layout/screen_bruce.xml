@@ -28,8 +28,15 @@
                 style="@style/BodyText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
                 android:text="Not connected" />
+
+            <TextView
+                style="@style/MutedText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:text="Validated with Heltec Firmware v0.2.1. Large retained field logs now rebuild before the WebUI starts." />
 
             <EditText
                 android:id="@+id/bruceSsid"

@@ -35,8 +35,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:layout_marginBottom="10dp"
                 android:text="Connect the Heltec with a data-capable USB OTG adapter. Android must be the USB host." />
+
+            <TextView
+                style="@style/MutedText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="10dp"
+                android:text="Validated with ESP32 Marauder v1.14.0-heltec.2. OLED PRG: 1x next, hold select/start, 2x back/stop; the first press wakes a blank display." />
 
             <LinearLayout
                 android:layout_width="match_parent"

@@ -17,8 +17,9 @@ the interfaces that the current builds already expose.
 - Android 10 (API 29) or newer.
 - A phone that supports USB host mode and a data-capable USB-C OTG connection
   for Marauder.
-- The customized Bruce firmware running in WebUI mode for BruceNet.
-- The customized Marauder firmware running on the USB-connected device.
+- Heltec Firmware `v0.2.1` or newer running in WebUI mode for BruceNet.
+- ESP32 Marauder `v1.14.0-heltec.2` or newer running on the USB-connected
+  device.
 
 ## BruceNet connection
 
@@ -75,6 +76,11 @@ The Marauder interface includes:
 - A command safety classifier. Transmit/state-changing commands require typed
   `AUTHORIZE` confirmation; unknown future commands require a review dialog.
 
+The standalone OLED controls in `v1.14.0-heltec.2` are one PRG press for the
+next item, a long press (about 0.9 seconds) to select/start/confirm, and two
+presses to return/cancel/stop. If the inactivity timer has blanked the display,
+the first press only wakes it and is not also treated as navigation.
+
 Marauder Bluetooth scanning is a firmware feature, not an app transport. The
 current firmware does not advertise a BLE UART/controller service, so USB is
 required for app control.
@@ -122,4 +128,4 @@ certificate identity and continuity requirements are documented in
 [`SIGNING.md`](SIGNING.md).
 
 The app is configured with package ID `com.unkl3errl.helteccontroller`, minimum
-API 29, target API 35, and version `0.3.0`.
+API 29, target API 35, and version `0.3.1`.
