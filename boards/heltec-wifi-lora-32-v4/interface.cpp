@@ -142,7 +142,7 @@ constexpr OledMenuItem kLoraMenu[] = {
 
 constexpr OledMenuItem kFieldLogMenu[] = {
     {"Status", kShowFieldLog, false},
-    {"Start GPS + BLE", kStartFieldLog, false},
+    {"Start GPS+BLE+WiFi", kStartFieldLog, false},
     {"Stop logging", kStopFieldLog, false},
     {"Back", kBack, false},
 };
@@ -584,8 +584,8 @@ void drawWebUiPage() {
         );
         drawLine(
             39,
-            "GPS " + String(fieldLog.gpsFixes) + " BLE " + String(fieldLog.bleObservations) +
-                "/" + String(fieldLog.uniqueBleDevices)
+            "G" + String(fieldLog.gpsFixes) + " B" + String(fieldLog.bleObservations) +
+                " W" + String(fieldLog.wifiObservations)
         );
         drawLine(
             51,
@@ -1112,7 +1112,7 @@ void toggleLoraFromOled() {
 
 void setFieldLogFromOled(bool enable) {
     const bool wasActive = heltecFieldLoggerIsActive();
-    const bool ok = enable ? (wasActive || heltecFieldLoggerStart(true, true, true))
+    const bool ok = enable ? (wasActive || heltecFieldLoggerStart(true, true, true, true))
                            : (!wasActive || heltecFieldLoggerStop());
     setOledActionMessage(
         5,

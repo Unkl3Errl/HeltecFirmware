@@ -14,8 +14,10 @@
 #include "webFiles.h"
 #include <MD5Builder.h>
 #include <cerrno>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <esp32-hal-psram.h>
 #include <esp_heap_caps.h>
@@ -46,6 +48,7 @@ static void delayedWebUiRestart(void *) {
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
 static SemaphoreHandle_t heltecApiMutex = nullptr;
 static uint32_t heltecPhoneGpsSequence = 0;
+static uint32_t heltecPhoneWifiSequence = 0;
 
 static bool parseHeltecFiniteNumber(const String &text, double &output) {
     String trimmed = text;
@@ -65,6 +68,31 @@ static bool parseHeltecUnsigned64(const String &text, uint64_t &output) {
     char *end = nullptr;
     output = strtoull(trimmed.c_str(), &end, 10);
     return errno != ERANGE && end != trimmed.c_str() && end && *end == '\0';
+}
+
+static bool parseHeltecSigned32(const String &text, int32_t &output) {
+    String trimmed = text;
+    trimmed.trim();
+    if (trimmed.length() == 0) return false;
+    errno = 0;
+    char *end = nullptr;
+    const long value = strtol(trimmed.c_str(), &end, 10);
+    if (errno == ERANGE || end == trimmed.c_str() || !end || *end != '\0') return false;
+    if (value < INT32_MIN || value > INT32_MAX) return false;
+    output = static_cast<int32_t>(value);
+    return true;
+}
+
+static bool isHeltecMacAddress(const String &value) {
+    if (value.length() != 17) return false;
+    for (size_t index = 0; index < value.length(); index++) {
+        if (index % 3 == 2) {
+            if (value[index] != ':') return false;
+        } else if (!isxdigit(static_cast<unsigned char>(value[index]))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 #if !defined(LITE_VERSION)
@@ -582,6 +610,133 @@ void configureWebServer() {
         request->send(200, "application/json", heltecFieldLoggerStatusJson());
     });
 
+    // Android performs the scan and submits bounded observations. The Heltec
+    // radio remains on BruceNet, so logging cannot move or stop the device AP.
+    server->on("/api/heltec/fieldlog/phone-wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (!checkUserWebAuth(request)) return;
+        if (
+            !request->hasParam("bssid", true) || !request->hasParam("rssiDbm", true) ||
+            !request->hasParam("frequencyMhz", true)
+        ) {
+            request->send(
+                400,
+                "application/json",
+                "{\"error\":\"bssid, rssiDbm, and frequencyMhz are required\"}"
+            );
+            return;
+        }
+
+        String bssid = request->getParam("bssid", true)->value();
+        bssid.toUpperCase();
+        if (!isHeltecMacAddress(bssid)) {
+            request->send(400, "application/json", "{\"error\":\"invalid BSSID\"}");
+            return;
+        }
+
+        int32_t rssiDbm = 0;
+        int32_t frequencyMhz = 0;
+        if (
+            !parseHeltecSigned32(request->getParam("rssiDbm", true)->value(), rssiDbm) ||
+            rssiDbm < -127 || rssiDbm > 20 ||
+            !parseHeltecSigned32(
+                request->getParam("frequencyMhz", true)->value(), frequencyMhz
+            ) ||
+            frequencyMhz < 2000 || frequencyMhz > 7200
+        ) {
+            request->send(400, "application/json", "{\"error\":\"invalid WiFi signal data\"}");
+            return;
+        }
+
+        HeltecFieldWifiRecord record;
+        record.bssid = bssid;
+        record.rssiDbm = rssiDbm;
+        record.frequencyMhz = static_cast<uint32_t>(frequencyMhz);
+        record.sequence = __atomic_add_fetch(&heltecPhoneWifiSequence, 1, __ATOMIC_RELAXED);
+
+        if (request->hasParam("ssid", true)) {
+            const String ssid = request->getParam("ssid", true)->value();
+            if (ssid.length() > 64) {
+                request->send(400, "application/json", "{\"error\":\"SSID is too long\"}");
+                return;
+            }
+            record.ssid = ssid;
+        }
+        if (request->hasParam("capabilities", true)) {
+            const String capabilities = request->getParam("capabilities", true)->value();
+            if (capabilities.length() > 160) {
+                request->send(400, "application/json", "{\"error\":\"capabilities are too long\"}");
+                return;
+            }
+            record.capabilities = capabilities;
+        }
+
+        int32_t optionalSigned = 0;
+        if (request->hasParam("channelWidth", true)) {
+            if (
+                !parseHeltecSigned32(
+                    request->getParam("channelWidth", true)->value(), optionalSigned
+                ) ||
+                optionalSigned < -1 || optionalSigned > 10
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid channel width\"}");
+                return;
+            }
+            record.channelWidth = optionalSigned;
+        }
+
+        for (const char *name : {"centerFrequency0Mhz", "centerFrequency1Mhz"}) {
+            if (!request->hasParam(name, true)) continue;
+            if (
+                !parseHeltecSigned32(request->getParam(name, true)->value(), optionalSigned) ||
+                optionalSigned < 0 || optionalSigned > 7200
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid center frequency\"}");
+                return;
+            }
+            if (!strcmp(name, "centerFrequency0Mhz")) {
+                record.centerFrequency0Mhz = static_cast<uint32_t>(optionalSigned);
+            } else {
+                record.centerFrequency1Mhz = static_cast<uint32_t>(optionalSigned);
+            }
+        }
+
+        uint64_t optionalUnsigned = 0;
+        if (request->hasParam("scanSequence", true)) {
+            if (
+                !parseHeltecUnsigned64(
+                    request->getParam("scanSequence", true)->value(), optionalUnsigned
+                ) ||
+                optionalUnsigned > UINT32_MAX
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid scan sequence\"}");
+                return;
+            }
+            record.scanSequence = static_cast<uint32_t>(optionalUnsigned);
+        }
+        if (request->hasParam("sourceUnixTimeMs", true)) {
+            if (
+                !parseHeltecUnsigned64(
+                    request->getParam("sourceUnixTimeMs", true)->value(), optionalUnsigned
+                ) ||
+                optionalUnsigned < 946684800000ULL || optionalUnsigned > 4102444800000ULL
+            ) {
+                request->send(400, "application/json", "{\"error\":\"invalid source time\"}");
+                return;
+            }
+            record.sourceUnixTimeMs = optionalUnsigned;
+        }
+
+        if (!heltecFieldLoggerRecordWifi(record)) {
+            request->send(
+                409,
+                "application/json",
+                "{\"error\":\"active field log with WiFi enabled is required\"}"
+            );
+            return;
+        }
+        request->send(200, "application/json", heltecFieldLoggerStatusJson());
+    });
+
     // Register specific paths before /fieldlog; AsyncWebServer also matches path prefixes.
     server->on("/api/heltec/fieldlog/files", HTTP_GET, [](AsyncWebServerRequest *request) {
         if (!checkUserWebAuth(request)) return;
@@ -622,10 +777,13 @@ void configureWebServer() {
             const bool ble = !request->hasParam("ble", true) ||
                              request->getParam("ble", true)->value() == "true" ||
                              request->getParam("ble", true)->value() == "1";
+            const bool wifi = request->hasParam("wifi", true) &&
+                              (request->getParam("wifi", true)->value() == "true" ||
+                               request->getParam("wifi", true)->value() == "1");
             const bool autoResume = !request->hasParam("autoResume", true) ||
                                     request->getParam("autoResume", true)->value() == "true" ||
                                     request->getParam("autoResume", true)->value() == "1";
-            ok = heltecFieldLoggerStart(gps, ble, autoResume);
+            ok = heltecFieldLoggerStart(gps, ble, wifi, autoResume);
         } else if (action == "stop") {
             ok = heltecFieldLoggerStop();
         } else {
