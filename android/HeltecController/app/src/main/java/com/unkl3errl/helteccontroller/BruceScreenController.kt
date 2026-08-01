@@ -1,14 +1,24 @@
 package com.unkl3errl.helteccontroller
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.Intent
+import android.app.Dialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.net.ConnectivityManager
 import android.location.Location
 import android.net.Uri
 import android.text.InputType
 import android.view.View
+import android.view.ViewGroup
+import android.view.Window
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
@@ -36,6 +46,8 @@ class BruceScreenController(
     )
 
     private val executor = Executors.newSingleThreadExecutor()
+    private val connectivityManager =
+        activity.getSystemService(ConnectivityManager::class.java)
     private val connectionStatus: TextView = root.findViewById(R.id.bruceConnectionStatus)
     private val systemStatus: TextView = root.findViewById(R.id.bruceSystemStatus)
     private val loggerStatus: TextView = root.findViewById(R.id.bruceLoggerStatus)
@@ -50,6 +62,7 @@ class BruceScreenController(
     private val webPassword: EditText = root.findViewById(R.id.bruceWebPassword)
     private var loginAfterNetworkApproval = false
     private var phoneGpsEnabled = false
+    private var webUiDialog: Dialog? = null
 
     init {
         root.findViewById<Button>(R.id.bruceJoinWifi).setOnClickListener {
@@ -158,6 +171,9 @@ class BruceScreenController(
     }
 
     fun destroy() {
+        webUiDialog?.dismiss()
+        webUiDialog = null
+        connectivityManager.bindProcessToNetwork(null)
         executor.shutdownNow()
     }
 
@@ -447,11 +463,106 @@ class BruceScreenController(
         }
     }
 
+    @SuppressLint("SetJavaScriptEnabled")
     private fun openWebUi() {
         configureClient()
-        runCatching {
-            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(client.displayUrl())))
-        }.onFailure { toast("No browser is available") }
+        webUiDialog?.dismiss()
+        val network = client.network
+        if (network == null) {
+            toast("Join BruceNet before opening the WebUI")
+            return
+        }
+        if (!connectivityManager.bindProcessToNetwork(network)) {
+            toast("Android could not bind the WebUI to BruceNet")
+            return
+        }
+
+        val baseUri = Uri.parse(client.displayUrl())
+        val webView = runCatching {
+            WebView(activity).apply {
+                setBackgroundColor(Color.rgb(7, 16, 20))
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView,
+                        request: WebResourceRequest,
+                    ): Boolean {
+                        val target = request.url
+                        val local = target.scheme == baseUri.scheme &&
+                            target.host == baseUri.host &&
+                            target.port == baseUri.port
+                        if (!local) toast("Blocked navigation outside the Bruce WebUI")
+                        return !local
+                    }
+                }
+                loadUrl(client.displayUrl())
+            }
+        }.getOrElse { error ->
+            connectivityManager.bindProcessToNetwork(null)
+            toast("Could not open the embedded WebUI: ${error.message ?: error.javaClass.simpleName}")
+            return
+        }
+
+        val dialog = Dialog(activity).apply {
+            requestWindowFeature(Window.FEATURE_NO_TITLE)
+        }
+        val title = TextView(activity).apply {
+            text = "Bruce WebUI · local device"
+            textSize = 20f
+            setTextColor(activity.getColor(R.color.text))
+            setPadding(24, 20, 24, 20)
+        }
+        val close = Button(activity).apply { text = "CLOSE" }
+        val browser = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 16, 16, 16)
+            setBackgroundColor(activity.getColor(R.color.bg))
+            addView(
+                title,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+            addView(
+                webView,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f,
+                ),
+            )
+            addView(
+                close,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+        dialog.setContentView(browser)
+        dialog.setCanceledOnTouchOutside(false)
+        close.setOnClickListener { dialog.dismiss() }
+        webUiDialog = dialog
+        dialog.setOnDismissListener {
+            webView.stopLoading()
+            webView.destroy()
+            connectivityManager.bindProcessToNetwork(null)
+            if (webUiDialog === dialog) webUiDialog = null
+        }
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(activity.getColor(R.color.bg)))
+            setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        }
     }
 
     private fun configureClient() = client.configure(baseUrl.text.toString())

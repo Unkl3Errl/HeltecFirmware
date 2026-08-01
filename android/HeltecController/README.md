@@ -37,10 +37,13 @@ Defaults used by the current firmware are:
 | WebUI username | `admin` |
 | WebUI password | `bruce` |
 
-The app requests BruceNet as a local-only peer network and routes only Bruce API
-requests through it. On Android phones that support concurrent local-only Wi-Fi,
-mobile data or the primary internet network can remain available. Android still
-controls whether concurrency is available on a particular phone.
+The app requests BruceNet as a local-only peer network and routes Bruce API
+requests through it. **Open WebUI** uses an embedded browser that is temporarily
+bound to the same device network, so the WebUI works even when the phone keeps a
+different default internet connection. On Android phones that support concurrent
+local-only Wi-Fi, mobile data or the primary internet network can remain
+available. Android still controls whether concurrency is available on a
+particular phone.
 
 The Bruce interface includes:
 
@@ -54,7 +57,8 @@ The Bruce interface includes:
   those records are explicitly marked with `source: "android"`.
 - SX1262 receiver control, receive history, and current radio status.
 - Firmware-limited LoRa transmission with typed `TRANSMIT` confirmation.
-- Guarded restart and a link to the full built-in WebUI.
+- Guarded restart and an embedded, same-device-only view of the full built-in
+  WebUI.
 
 ## Marauder connection
 
