@@ -18,13 +18,21 @@ constexpr size_t kMinimumFreeBytes = 256 * 1024;
 constexpr size_t kMaximumListedFiles = 64;
 constexpr size_t kUniqueBleCapacity = 256;
 constexpr size_t kRecentBleCapacity = 128;
+constexpr size_t kUniqueWifiCapacity = 256;
+constexpr size_t kRecentWifiCapacity = 128;
 constexpr size_t kReconstructionReadBlockBytes = 4096;
 constexpr uint32_t kBleObservationIntervalMs = 60 * 1000;
+constexpr uint32_t kWifiObservationIntervalMs = 60 * 1000;
 constexpr uint32_t kBleScanDurationMs = 5000;
 constexpr uint32_t kBleScanPauseMs = 10000;
 constexpr uint32_t kGpsAssociationMaximumAgeMs = 30000;
 
 struct RecentBleDevice {
+    uint32_t hash = 0;
+    uint32_t lastSeenMs = 0;
+};
+
+struct RecentWifiNetwork {
     uint32_t hash = 0;
     uint32_t lastSeenMs = 0;
 };
@@ -50,17 +58,23 @@ bool gpsOwned = false;
 bool bleEnabled = false;
 bool bleScanning = false;
 bool uniqueBleCapacityReached = false;
+bool wifiEnabled = false;
+bool uniqueWifiCapacityReached = false;
 uint32_t sessionId = 0;
 uint32_t segment = 0;
 uint32_t bootCount = 0;
 uint32_t resumeCount = 0;
 uint32_t recoveredSegments = 0;
 uint32_t gpsFixes = 0;
+uint32_t phoneGpsFixes = 0;
 uint32_t bleObservations = 0;
 uint32_t uniqueBleDevices = 0;
+uint32_t wifiObservations = 0;
+uint32_t uniqueWifiNetworks = 0;
 uint32_t startedAtMs = 0;
 uint32_t lastGpsAtMs = 0;
 uint32_t lastBleAtMs = 0;
+uint32_t lastWifiAtMs = 0;
 size_t sessionBytes = 0;
 String currentPath;
 String lastError;
@@ -68,6 +82,9 @@ String resetReason;
 uint32_t uniqueBleHashes[kUniqueBleCapacity] = {};
 RecentBleDevice recentBleDevices[kRecentBleCapacity] = {};
 size_t recentBleNext = 0;
+uint32_t uniqueWifiHashes[kUniqueWifiCapacity] = {};
+RecentWifiNetwork recentWifiNetworks[kRecentWifiCapacity] = {};
+size_t recentWifiNext = 0;
 bool latestGpsValid = false;
 double latestLatitude = 0.0;
 double latestLongitude = 0.0;
@@ -179,10 +196,10 @@ const char *resetReasonName(esp_reset_reason_t reason) {
     }
 }
 
-uint32_t hashBleAddress(const String &address) {
+uint32_t hashIdentifier(const String &identifier) {
     uint32_t hash = 2166136261u;
-    for (size_t index = 0; index < address.length(); index++) {
-        hash ^= static_cast<uint8_t>(address[index]);
+    for (size_t index = 0; index < identifier.length(); index++) {
+        hash ^= static_cast<uint8_t>(identifier[index]);
         hash *= 16777619u;
     }
     return hash == 0 ? 1 : hash;
@@ -195,9 +212,13 @@ void clearSessionStateLocked() {
     bleObservations = 0;
     uniqueBleDevices = 0;
     uniqueBleCapacityReached = false;
+    wifiObservations = 0;
+    uniqueWifiNetworks = 0;
+    uniqueWifiCapacityReached = false;
     startedAtMs = millis();
     lastGpsAtMs = 0;
     lastBleAtMs = 0;
+    lastWifiAtMs = 0;
     sessionBytes = 0;
     lastError = "";
     latestGpsValid = false;
@@ -205,6 +226,9 @@ void clearSessionStateLocked() {
     memset(uniqueBleHashes, 0, sizeof(uniqueBleHashes));
     memset(recentBleDevices, 0, sizeof(recentBleDevices));
     recentBleNext = 0;
+    memset(uniqueWifiHashes, 0, sizeof(uniqueWifiHashes));
+    memset(recentWifiNetworks, 0, sizeof(recentWifiNetworks));
+    recentWifiNext = 0;
 }
 
 void noteUniqueBleLocked(uint32_t hash) {
@@ -218,6 +242,17 @@ void noteUniqueBleLocked(uint32_t hash) {
     }
 }
 
+void noteUniqueWifiLocked(uint32_t hash) {
+    for (size_t index = 0; index < uniqueWifiNetworks; index++) {
+        if (uniqueWifiHashes[index] == hash) return;
+    }
+    if (uniqueWifiNetworks < kUniqueWifiCapacity) {
+        uniqueWifiHashes[uniqueWifiNetworks++] = hash;
+    } else {
+        uniqueWifiCapacityReached = true;
+    }
+}
+
 bool shouldRecordBleLocked(uint32_t hash, uint32_t now) {
     for (RecentBleDevice &device : recentBleDevices) {
         if (device.hash != hash) continue;
@@ -227,6 +262,18 @@ bool shouldRecordBleLocked(uint32_t hash, uint32_t now) {
     }
     recentBleDevices[recentBleNext] = {hash, now};
     recentBleNext = (recentBleNext + 1) % kRecentBleCapacity;
+    return true;
+}
+
+bool shouldRecordWifiLocked(uint32_t hash, uint32_t now) {
+    for (RecentWifiNetwork &network : recentWifiNetworks) {
+        if (network.hash != hash) continue;
+        if (now - network.lastSeenMs < kWifiObservationIntervalMs) return false;
+        network.lastSeenMs = now;
+        return true;
+    }
+    recentWifiNetworks[recentWifiNext] = {hash, now};
+    recentWifiNext = (recentWifiNext + 1) % kRecentWifiCapacity;
     return true;
 }
 
@@ -309,7 +356,11 @@ void countRecordLocked(JsonDocument &document) {
     } else if (!strcmp(type, "ble")) {
         bleObservations++;
         const char *address = document["address"] | "";
-        if (*address) noteUniqueBleLocked(hashBleAddress(String(address)));
+        if (*address) noteUniqueBleLocked(hashIdentifier(String(address)));
+    } else if (!strcmp(type, "wifi")) {
+        wifiObservations++;
+        const char *bssid = document["bssid"] | "";
+        if (*bssid) noteUniqueWifiLocked(hashIdentifier(String(bssid)));
     } else if (!strcmp(type, "session_resume")) {
         resumeCount++;
     } else if (!strcmp(type, "tail_recovery")) {
@@ -343,7 +394,15 @@ bool countGeneratedRecordLineLocked(const String &line) {
         bleObservations++;
         String address;
         if (extractJsonStringField(line, "\"address\":\"", address) && address.length() == 17) {
-            noteUniqueBleLocked(hashBleAddress(address));
+            noteUniqueBleLocked(hashIdentifier(address));
+        }
+        return true;
+    }
+    if (line.indexOf("\"type\":\"wifi\"") >= 0) {
+        wifiObservations++;
+        String bssid;
+        if (extractJsonStringField(line, "\"bssid\":\"", bssid) && bssid.length() == 17) {
+            noteUniqueWifiLocked(hashIdentifier(bssid));
         }
         return true;
     }
@@ -433,6 +492,7 @@ void persistSessionLocked() {
     preferences.putBool("auto", autoResume);
     preferences.putBool("gps", gpsEnabled);
     preferences.putBool("ble", bleEnabled);
+    preferences.putBool("wifi", wifiEnabled);
     preferences.putUInt("session", sessionId);
     preferences.putUInt("segment", segment);
     preferences.putString("path", currentPath);
@@ -455,7 +515,7 @@ void setBleError(const String &error) {
 
 void recordBleDevice(const NimBLEAdvertisedDevice &device) {
     const String address(device.getAddress().toString().c_str());
-    const uint32_t addressHash = hashBleAddress(address);
+    const uint32_t addressHash = hashIdentifier(address);
     const uint32_t now = millis();
 
     LoggerLock lock;
@@ -597,6 +657,7 @@ void heltecFieldLoggerBegin() {
         autoResume = preferences.getBool("auto", true);
         gpsEnabled = preferences.getBool("gps", true);
         bleEnabled = preferences.getBool("ble", true);
+        wifiEnabled = preferences.getBool("wifi", false);
         sessionId = preferences.getUInt("session", 0);
         segment = preferences.getUInt("segment", 0);
         currentPath = preferences.getString("path", "");
@@ -665,14 +726,19 @@ void heltecFieldLoggerPoll() {
     stopSelectedServices(stopGps);
 }
 
-bool heltecFieldLoggerStart(bool enableGps, bool enableBle, bool enableAutoResume) {
+bool heltecFieldLoggerStart(
+    bool enableGps,
+    bool enableBle,
+    bool enableWifi,
+    bool enableAutoResume
+) {
     bool startServices = false;
     {
         LoggerLock lock;
         if (!lock || !initialized) return false;
         if (active) return true;
-        if (!enableGps && !enableBle) {
-            lastError = "select GPS, BLE, or both";
+        if (!enableGps && !enableBle && !enableWifi) {
+            lastError = "select GPS, BLE, WiFi, or a combination";
             return false;
         }
         if (!LittleFS.exists(kDirectory) && !LittleFS.mkdir(kDirectory)) {
@@ -702,6 +768,7 @@ bool heltecFieldLoggerStart(bool enableGps, bool enableBle, bool enableAutoResum
         autoResume = enableAutoResume;
         gpsEnabled = enableGps;
         bleEnabled = enableBle;
+        wifiEnabled = enableWifi;
         gpsOwned = false;
         persistSessionLocked();
 
@@ -709,6 +776,7 @@ bool heltecFieldLoggerStart(bool enableGps, bool enableBle, bool enableAutoResum
         addCommonFieldsLocked(document, "session_start");
         document["gpsEnabled"] = gpsEnabled;
         document["bleEnabled"] = bleEnabled;
+        document["wifiEnabled"] = wifiEnabled;
         document["autoResume"] = autoResume;
         document["resetReason"] = resetReason;
         if (!appendRecordLocked(document)) {
@@ -759,14 +827,17 @@ void heltecFieldLoggerSuspendForSleep() {
     stopSelectedServices(stopGps);
 }
 
-void heltecFieldLoggerRecordGps(const HeltecFieldGpsRecord &record) {
+bool heltecFieldLoggerRecordGps(const HeltecFieldGpsRecord &record) {
     LoggerLock lock;
-    if (!lock || !active || !gpsEnabled) return;
+    if (!lock || !active || !gpsEnabled) return false;
 
     JsonDocument document;
     addCommonFieldsLocked(document, "gps");
+    document["source"] = record.source.length() > 0 ? record.source.substring(0, 16) : "onboard";
+    if (record.provider.length() > 0) document["provider"] = record.provider.substring(0, 16);
     document["sourceUptimeMs"] = record.uptimeMs;
     document["sequence"] = record.sequence;
+    if (record.sourceUnixTimeMs > 0) document["sourceUnixTimeMs"] = record.sourceUnixTimeMs;
     document["latitude"] = record.latitude;
     document["longitude"] = record.longitude;
     document["satellites"] = record.satellites;
@@ -789,14 +860,61 @@ void heltecFieldLoggerRecordGps(const HeltecFieldGpsRecord &record) {
     if (!isnan(record.altitudeMeters)) document["altitudeMeters"] = record.altitudeMeters;
     if (!isnan(record.speedKmph)) document["speedKmph"] = record.speedKmph;
     if (!isnan(record.hdop)) document["hdop"] = record.hdop;
+    if (!isnan(record.accuracyMeters)) document["accuracyMeters"] = record.accuracyMeters;
     if (appendRecordLocked(document)) {
         gpsFixes++;
+        if (record.source == "android") phoneGpsFixes++;
         lastGpsAtMs = record.uptimeMs;
         latestGpsValid = true;
         latestLatitude = record.latitude;
         latestLongitude = record.longitude;
         latestGpsAtMs = record.uptimeMs;
+        return true;
     }
+    return false;
+}
+
+bool heltecFieldLoggerRecordWifi(const HeltecFieldWifiRecord &record) {
+    if (record.bssid.length() != 17) return false;
+    const uint32_t bssidHash = hashIdentifier(record.bssid);
+    const uint32_t now = millis();
+
+    LoggerLock lock;
+    if (!lock || !active || !wifiEnabled) return false;
+    if (!shouldRecordWifiLocked(bssidHash, now)) return true;
+
+    JsonDocument document;
+    addCommonFieldsLocked(document, "wifi");
+    document["source"] = record.source.length() > 0 ? record.source.substring(0, 16) : "android";
+    document["bssid"] = record.bssid;
+    if (record.ssid.length() > 0) document["ssid"] = record.ssid.substring(0, 64);
+    document["rssiDbm"] = record.rssiDbm;
+    document["frequencyMhz"] = record.frequencyMhz;
+    document["sequence"] = record.sequence;
+    document["scanSequence"] = record.scanSequence;
+    if (record.sourceUnixTimeMs > 0) document["sourceUnixTimeMs"] = record.sourceUnixTimeMs;
+    if (record.channelWidth >= 0) document["channelWidth"] = record.channelWidth;
+    if (record.centerFrequency0Mhz > 0) {
+        document["centerFrequency0Mhz"] = record.centerFrequency0Mhz;
+    }
+    if (record.centerFrequency1Mhz > 0) {
+        document["centerFrequency1Mhz"] = record.centerFrequency1Mhz;
+    }
+    if (record.capabilities.length() > 0) {
+        document["capabilities"] = record.capabilities.substring(0, 160);
+    }
+    if (latestGpsValid && now - latestGpsAtMs <= kGpsAssociationMaximumAgeMs) {
+        document["location"]["latitude"] = latestLatitude;
+        document["location"]["longitude"] = latestLongitude;
+        document["location"]["ageMs"] = now - latestGpsAtMs;
+    }
+    if (appendRecordLocked(document)) {
+        wifiObservations++;
+        noteUniqueWifiLocked(bssidHash);
+        lastWifiAtMs = now;
+        return true;
+    }
+    return false;
 }
 
 HeltecFieldLogSnapshot heltecFieldLoggerSnapshot() {
@@ -811,17 +929,23 @@ HeltecFieldLogSnapshot heltecFieldLoggerSnapshot() {
     snapshot.bleEnabled = bleEnabled;
     snapshot.bleScanning = bleScanning;
     snapshot.uniqueBleCapacityReached = uniqueBleCapacityReached;
+    snapshot.wifiEnabled = wifiEnabled;
+    snapshot.uniqueWifiCapacityReached = uniqueWifiCapacityReached;
     snapshot.sessionId = sessionId;
     snapshot.segment = segment;
     snapshot.bootCount = bootCount;
     snapshot.resumeCount = resumeCount;
     snapshot.recoveredSegments = recoveredSegments;
     snapshot.gpsFixes = gpsFixes;
+    snapshot.phoneGpsFixes = phoneGpsFixes;
     snapshot.bleObservations = bleObservations;
     snapshot.uniqueBleDevices = uniqueBleDevices;
+    snapshot.wifiObservations = wifiObservations;
+    snapshot.uniqueWifiNetworks = uniqueWifiNetworks;
     snapshot.startedAtMs = startedAtMs;
     snapshot.lastGpsAtMs = lastGpsAtMs;
     snapshot.lastBleAtMs = lastBleAtMs;
+    snapshot.lastWifiAtMs = lastWifiAtMs;
     snapshot.sessionBytes = sessionBytes;
     snapshot.fileName = basenameOf(currentPath);
     snapshot.lastError = lastError;
@@ -845,6 +969,7 @@ String heltecFieldLoggerStatusJson() {
     document["gps"]["enabled"] = snapshot.gpsEnabled;
     document["gps"]["owned"] = snapshot.gpsOwned;
     document["gps"]["fixes"] = snapshot.gpsFixes;
+    document["gps"]["phoneFixes"] = snapshot.phoneGpsFixes;
     document["gps"]["lastRecordAgeMs"] =
         snapshot.lastGpsAtMs > 0 ? millis() - snapshot.lastGpsAtMs : 0;
     document["ble"]["enabled"] = snapshot.bleEnabled;
@@ -855,6 +980,15 @@ String heltecFieldLoggerStatusJson() {
     document["ble"]["uniqueCapacityReached"] = snapshot.uniqueBleCapacityReached;
     document["ble"]["lastRecordAgeMs"] =
         snapshot.lastBleAtMs > 0 ? millis() - snapshot.lastBleAtMs : 0;
+    document["wifi"]["enabled"] = snapshot.wifiEnabled;
+    document["wifi"]["source"] = "android";
+    document["wifi"]["observations"] = snapshot.wifiObservations;
+    document["wifi"]["uniqueNetworks"] = snapshot.uniqueWifiNetworks;
+    document["wifi"]["uniqueCapacity"] = kUniqueWifiCapacity;
+    document["wifi"]["uniqueCapacityReached"] = snapshot.uniqueWifiCapacityReached;
+    document["wifi"]["observationIntervalMs"] = kWifiObservationIntervalMs;
+    document["wifi"]["lastRecordAgeMs"] =
+        snapshot.lastWifiAtMs > 0 ? millis() - snapshot.lastWifiAtMs : 0;
     document["storage"]["directory"] = kDirectory;
     document["storage"]["fileName"] = snapshot.fileName;
     document["storage"]["sessionBytes"] = static_cast<uint64_t>(snapshot.sessionBytes);

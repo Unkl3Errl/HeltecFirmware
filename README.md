@@ -12,13 +12,15 @@ The customized Heltec WiFi LoRa 32 V4 build adds:
   inverted selection highlighting, and the same PRG gestures: one press moves
   to the next item, two presses return, and a 0.9-second hold selects.
 - On-device controls for Bruce's supported GPS monitor, receive-only LoRa,
-  GPS+BLE field logger, diagnostics, persisted 15/30/45/60-second display
+  GPS+BLE+phone-Wi-Fi field logger, diagnostics, persisted 15/30/45/60-second display
   timeouts (or always on), confirmed PRG-wake sleep, and confirmed power down.
 - Authenticated WebUI hardware, network, memory, GPS, and LoRa diagnostics.
 - Live GNSS monitoring with a bounded 16-fix track and JSON/GPX export.
-- Reset-resistant LittleFS field logging that appends GPS fixes and passive BLE
-  observations as NDJSON, resumes after a reset when enabled, and exposes
-  authenticated status and downloads in the WebUI.
+- Reset-resistant LittleFS field logging that appends onboard or Android GPS
+  fixes, passive BLE observations, and explicitly labeled Android Wi-Fi
+  observations as NDJSON, resumes after a
+  reset when enabled, and exposes authenticated status and downloads in the
+  WebUI and Android app.
 - SX1262 receive control with an eight-packet history and JSON export.
 - Constrained US915 WebUI transmission: 902–928 MHz, fixed 2 dBm, printable
   payloads up to 64 bytes, per-packet confirmation, and cooldown.
@@ -31,6 +33,16 @@ The customized Heltec WiFi LoRa 32 V4 build adds:
 # RF REAPER
 
 **RF REAPER** is our custom PCB devkit, purpose-built for Bruce!
+
+The canonical Android companion is
+[`Unkl3Errl/HeltecController`](https://github.com/Unkl3Errl/HeltecController).
+It identifies Bruce or Marauder at runtime and enables only the matching
+interface. For Bruce it uses the authenticated BruceNet WebUI API or a narrow
+physical-USB bridge, exports field logs through Android's document picker, and
+can supply explicitly labeled phone GPS fixes and Wi-Fi observations while
+logging. The USB bridge is limited to field-logger operations; it is not a
+general IP or Internet tether. The app also provides a native Bruce vector-
+display remote, LittleFS file manager, and guarded USB CDC console.
 
 Every major feature works natively, right out of the box. Sub-GHz, NFC/RFID, IR, 2.4GHz(NRF), GPS-ready, and a microSD, all driven by a beefy ESP32-S3 (16MB Flash / 8MB PSRAM). Tons of GPIOs via the AW9523 expander plus Flipper Zero & iButton header compatibility mean you can hack, mod, and build on it endlessly. Want a specific function? Ask us with an issue, we'll check it.
 

@@ -28,6 +28,7 @@ KNOWN_TYPES = {
     "session_stop",
     "gps",
     "ble",
+    "wifi",
 }
 
 
@@ -81,6 +82,24 @@ def validate_record(record: Any, path: Path, line_number: int, session: int, seg
         location = record.get("location")
         if location is not None:
             require(isinstance(location, dict), f"{label}: BLE location is not an object")
+            require(-90 <= float(location.get("latitude")) <= 90, f"{label}: invalid associated latitude")
+            require(-180 <= float(location.get("longitude")) <= 180, f"{label}: invalid associated longitude")
+    elif record["type"] == "wifi":
+        require(record.get("source") == "android", f"{label}: invalid Wi-Fi source")
+        bssid = record.get("bssid")
+        require(isinstance(bssid, str) and BLE_ADDRESS.fullmatch(bssid) is not None, f"{label}: invalid Wi-Fi BSSID")
+        ssid = record.get("ssid")
+        require(
+            ssid is None or (isinstance(ssid, str) and len(ssid) <= 64),
+            f"{label}: invalid Wi-Fi SSID",
+        )
+        rssi = record.get("rssiDbm")
+        require(isinstance(rssi, int) and -127 <= rssi <= 20, f"{label}: invalid Wi-Fi RSSI")
+        frequency = record.get("frequencyMhz")
+        require(isinstance(frequency, int) and 2000 <= frequency <= 7200, f"{label}: invalid Wi-Fi frequency")
+        location = record.get("location")
+        if location is not None:
+            require(isinstance(location, dict), f"{label}: Wi-Fi location is not an object")
             require(-90 <= float(location.get("latitude")) <= 90, f"{label}: invalid associated latitude")
             require(-180 <= float(location.get("longitude")) <= 180, f"{label}: invalid associated longitude")
 
@@ -172,11 +191,23 @@ def run_self_test() -> None:
                 "address": "00:11:22:33:44:55",
                 "rssiDbm": -60,
             },
+            common
+            | {
+                "type": "wifi",
+                "segment": 1,
+                "bootCount": 2,
+                "uptimeMs": 150,
+                "source": "android",
+                "bssid": "02:00:00:00:00:01",
+                "ssid": "FIELD-TEST",
+                "rssiDbm": -48,
+                "frequencyMhz": 2437,
+            },
             common | {"type": "session_stop", "segment": 1, "bootCount": 2, "uptimeMs": 200},
         ]
         second.write_text("\n".join(json.dumps(record) for record in second_records) + "\n")
         results = validate_files(directory.glob("*.ndjson"))
-        require(sum(len(result.records) for result in results) == 5, "self-test record count mismatch")
+        require(sum(len(result.records) for result in results) == 6, "self-test record count mismatch")
         require(results[0].interrupted_tail_bytes > 0, "self-test did not detect interrupted tail")
     print("PASS field-log validator self-test")
 
