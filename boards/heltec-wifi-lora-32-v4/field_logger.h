@@ -25,15 +25,6 @@ struct HeltecFieldGpsRecord {
     double accuracyMeters = NAN;
 };
 
-struct HeltecFieldWifiRecord {
-    String bssid;
-    String ssid;
-    String authentication;
-    int32_t rssiDbm = -127;
-    uint8_t channel = 0;
-    bool hidden = false;
-};
-
 struct HeltecFieldLogSnapshot {
     bool initialized = false;
     bool active = false;
@@ -43,9 +34,6 @@ struct HeltecFieldLogSnapshot {
     bool bleEnabled = false;
     bool bleScanning = false;
     bool uniqueBleCapacityReached = false;
-    bool wifiEnabled = false;
-    bool wifiScanning = false;
-    bool uniqueWifiCapacityReached = false;
     uint32_t sessionId = 0;
     uint32_t segment = 0;
     uint32_t bootCount = 0;
@@ -55,12 +43,9 @@ struct HeltecFieldLogSnapshot {
     uint32_t phoneGpsFixes = 0;
     uint32_t bleObservations = 0;
     uint32_t uniqueBleDevices = 0;
-    uint32_t wifiObservations = 0;
-    uint32_t uniqueWifiNetworks = 0;
     uint32_t startedAtMs = 0;
     uint32_t lastGpsAtMs = 0;
     uint32_t lastBleAtMs = 0;
-    uint32_t lastWifiAtMs = 0;
     size_t sessionBytes = 0;
     String fileName;
     String lastError;
@@ -69,18 +54,13 @@ struct HeltecFieldLogSnapshot {
 
 void heltecFieldLoggerBegin();
 void heltecFieldLoggerPoll();
-bool heltecFieldLoggerStart(
-    bool gpsEnabled, bool bleEnabled, bool autoResume, bool wifiEnabled = false
-);
+bool heltecFieldLoggerStart(bool gpsEnabled, bool bleEnabled, bool autoResume);
 bool heltecFieldLoggerStop();
 void heltecFieldLoggerSuspendForSleep();
 bool heltecFieldLoggerRecordGps(const HeltecFieldGpsRecord &record);
-void heltecFieldLoggerRecordWifi(const HeltecFieldWifiRecord &record);
-void heltecFieldLoggerSetWifiScanning(bool scanning);
 HeltecFieldLogSnapshot heltecFieldLoggerSnapshot();
 String heltecFieldLoggerStatusJson();
 String heltecFieldLoggerFilesJson();
 String heltecFieldLoggerDownloadPath(const String &fileName);
 bool heltecFieldLoggerIsActive();
 bool heltecFieldLoggerUsesGps();
-bool heltecFieldLoggerUsesWifi();

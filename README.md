@@ -1,33 +1,26 @@
-# Unified Bruce + Marauder for Heltec WiFi LoRa 32 V4
+# Bruce for Heltec WiFi LoRa 32 V4
 
 This repository is a Heltec WiFi LoRa 32 V4-only firmware project derived from
 [BruceDevices/firmware](https://github.com/BruceDevices/firmware). Its build,
 board metadata, automated checks, and documentation target only the ESP32-S3
 Heltec V4 with 16 MB flash, 2 MB PSRAM, onboard SSD1306 OLED, SX1262 radio, and
-the attached GNSS module. A bounded, passive Wi-Fi survey adapted from
-[ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) is integrated
-into Bruce's existing display, WebUI, radio, storage, and authentication
-lifecycles instead of running a second firmware stack.
+the attached GNSS module. This project contains the Bruce firmware only; the
+shared Android companion is maintained separately.
 
 ## Releases and installation
 
-Use [INSTALL.md](INSTALL.md) for the firmware choice matrix, permanent download
-links and SHA-256 hashes, data-preserving Bruce upgrades, factory switching,
-bootloader recovery, Android installation, and passive post-flash checks. The
-current supported set is unified firmware `v0.2.2`, standalone Marauder
-`v1.14.0-heltec.2`, and Android controller `v0.3.3`.
+Use [INSTALL.md](INSTALL.md) for permanent download links and hashes,
+data-preserving upgrades, factory flashing, bootloader recovery, Android
+installation, and passive post-flash checks.
 
 ## Heltec V4 integration
 
-- Seven-page OLED status dashboard with PRG-button navigation, controls, and
+- Six-page OLED status dashboard with PRG-button navigation, controls, and
   deep-sleep entry.
-- Receive-only Marauder Wi-Fi survey with a 64-network device list, manual
-  scanning, and reset-resistant automatic field surveys that preserve the
-  BruceNet access point.
 - Authenticated WebUI hardware, network, memory, GPS, and LoRa diagnostics.
 - Live GNSS monitoring with a bounded 16-fix track and JSON/GPX export.
 - Reset-resistant LittleFS field logging that appends onboard or Android GPS
-  fixes plus passive BLE and Wi-Fi observations as NDJSON, resumes after a
+  fixes plus passive BLE observations as NDJSON, resumes after a
   reset when enabled, and exposes authenticated status and downloads in the
   WebUI and Android app.
 - SX1262 receive control with an eight-packet history and JSON export.
@@ -50,18 +43,19 @@ validation record are in [HELTEC_V4_PORT.md](HELTEC_V4_PORT.md).
 
 ## Android controller
 
-The native Android companion app is maintained in
-[`android/HeltecController`](android/HeltecController). It controls this
-firmware over the authenticated BruceNet WebUI API, exports field logs through
-Android's document picker, and can supply explicitly labeled phone GPS fixes
-while logging. Its legacy Marauder tab also supports the separate Heltec
-Marauder build over USB OTG.
+The canonical Android companion is
+[`Unkl3Errl/HeltecController`](https://github.com/Unkl3Errl/HeltecController).
+It identifies Bruce or Marauder at runtime and enables only the matching
+interface. For Bruce it uses the authenticated BruceNet WebUI API, exports
+field logs through Android's document picker, and can supply explicitly
+labeled phone GPS fixes while logging. It also provides a native Bruce
+vector-display remote, LittleFS file manager, and guarded USB CDC console for
+the original Bruce command set.
 
 The app keeps device credentials in memory, routes Bruce requests through the
 selected local-only Wi-Fi network, and requires confirmation for transmitting
-or state-changing operations. See the app's
-[`README.md`](android/HeltecController/README.md) for requirements, supported
-features, and build instructions.
+or state-changing operations. The app repository documents requirements,
+supported features, detection behavior, and build instructions.
 
 ## Build
 
@@ -159,5 +153,4 @@ every packet.
 
 Bruce and this derivative are distributed under the GNU Affero General Public
 License v3.0. Upstream authors and contributors retain their respective
-copyrights and attribution. The incorporated ESP32 Marauder survey behavior is
-adapted from MIT-licensed upstream code and retains attribution in its source.
+copyrights and attribution.

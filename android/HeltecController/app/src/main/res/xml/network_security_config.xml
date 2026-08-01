@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<network-security-config>
-    <!-- BruceNet is a local, isolated ESP32 access point with an HTTP-only WebUI. -->
-    <base-config cleartextTrafficPermitted="true" />
-</network-security-config>

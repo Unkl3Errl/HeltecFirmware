@@ -22,7 +22,6 @@
 #include <globals.h>
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
 #include "field_logger.h"
-#include "marauder_wifi.h"
 #endif
 
 File uploadFile;
@@ -494,45 +493,6 @@ void configureWebServer() {
         request->send(200, "application/json", heltecV4HardwareStatusJson());
     });
 
-    server->on("/api/heltec/capabilities", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (!checkUserWebAuth(request)) return;
-        request->send(200, "application/json", heltecUnifiedCapabilitiesJson());
-    });
-
-    // Register the specific results path before /wifi because this server also
-    // considers prefix matches when dispatching routes.
-    server->on("/api/heltec/wifi/results", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (!checkUserWebAuth(request)) return;
-        request->send(200, "application/json", heltecMarauderWifiResultsJson());
-    });
-
-    server->on("/api/heltec/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if (!checkUserWebAuth(request)) return;
-        request->send(200, "application/json", heltecMarauderWifiStatusJson());
-    });
-
-    server->on("/api/heltec/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
-        if (!checkUserWebAuth(request)) return;
-        if (!request->hasParam("action", true)) {
-            request->send(400, "application/json", "{\"error\":\"missing action\"}");
-            return;
-        }
-        const String action = request->getParam("action", true)->value();
-        bool ok = false;
-        int status = 200;
-        if (action == "scan") {
-            ok = heltecMarauderWifiRequestScan();
-            status = ok ? 202 : 409;
-        } else if (action == "clear") {
-            ok = heltecMarauderWifiClearResults();
-            status = ok ? 200 : 409;
-        } else {
-            request->send(400, "application/json", "{\"error\":\"invalid action\"}");
-            return;
-        }
-        request->send(status, "application/json", heltecMarauderWifiStatusJson());
-    });
-
     // Register phone-assisted GPS before the generic field-log route. The
     // endpoint only appends authenticated location fixes to an already-active
     // GPS field-log session; it cannot start a logger or radio service.
@@ -665,10 +625,7 @@ void configureWebServer() {
             const bool autoResume = !request->hasParam("autoResume", true) ||
                                     request->getParam("autoResume", true)->value() == "true" ||
                                     request->getParam("autoResume", true)->value() == "1";
-            const bool wifi = request->hasParam("wifi", true) &&
-                              (request->getParam("wifi", true)->value() == "true" ||
-                               request->getParam("wifi", true)->value() == "1");
-            ok = heltecFieldLoggerStart(gps, ble, autoResume, wifi);
+            ok = heltecFieldLoggerStart(gps, ble, autoResume);
         } else if (action == "stop") {
             ok = heltecFieldLoggerStop();
         } else {

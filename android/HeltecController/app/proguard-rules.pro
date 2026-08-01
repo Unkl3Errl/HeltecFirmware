@@ -1,2 +1,0 @@
--keep class com.hoho.android.usbserial.** { *; }
--dontwarn com.hoho.android.usbserial.**
