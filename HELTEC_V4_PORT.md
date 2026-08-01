@@ -30,27 +30,31 @@ upstream branch on July 18, 2026.
 - Reset-resistant LittleFS field logger for incremental onboard/Android GPS
   fixes and passive BLE observations, with optional automatic resume
   after a reset
-- OLED boot screen plus network, login, live GPS, live LoRa RX, hardware, and
-  field-log status pages
-- PRG button cycles through all six OLED dashboard pages
-- Holding PRG on the GPS or LoRa page toggles GPS monitoring or receive-only
-  LoRa listening
-- Holding PRG on the field-log page starts or stops a GPS+BLE log with
-  automatic reset resume enabled
-- Holding PRG for two seconds on the hardware page enters deep sleep after the
-  button is released; pressing PRG wakes the board
+- Marauder-style standalone OLED interface with four-row scrolling menus,
+  inverted selection highlighting, and nested Dashboard, GPS monitor, LoRa
+  receiver, Field logger, and System menus
+- One PRG press moves to the next item, two presses return to the previous menu,
+  and a 0.9-second hold selects the highlighted item
+- On-device GPS monitoring, receive-only LoRa listening, and reset-resistant
+  GPS+BLE field-log start/stop controls, plus status pages for each service
+- Persisted display timeout choices of always-on, 15, 30, 45, or 60 seconds;
+  the first press after blanking wakes the display without activating a menu item
+- Confirmed System-menu sleep with PRG wake and confirmed power down requiring
+  RST or a power cycle
 - Deep-sleep wake using the PRG/BOOT button on GPIO 0
 - A Heltec-only main menu that excludes unsupported accessory categories
 
-The onboard 128x64 SSD1306 OLED shows boot progress, WebUI connection details,
-live GPS state and counters, receive-only LoRa state, packet count, frequency,
-last-packet RSSI/SNR and a payload preview, passive hardware diagnostics, and
-field-log session/counter status.
-Short PRG presses cycle pages; a 0.9-second
-hold on the GPS, LoRa, or field-log page toggles that service. Bruce's complete graphical
+The onboard 128x64 SSD1306 OLED shows boot progress and a standalone menu using
+the same visual hierarchy and button-selection style as this project's Marauder
+firmware. Its Dashboard exposes WebUI connection details, live GPS state and
+counters, receive-only LoRa state, packet count, frequency, last-packet
+RSSI/SNR and a payload preview, passive hardware diagnostics, and field-log
+session/counter status. Dedicated submenus operate the supported GPS, LoRa RX,
+and field-logging services. The System menu provides device information,
+display timeout, button help, sleep, and power down. Bruce's complete graphical
 menu remains in the WebUI because it targets color TFT drivers and multi-button
-navigation. A two-second hold on the hardware page enters deep sleep after PRG
-is released.
+navigation. Constrained LoRa transmission also remains WebUI-only and requires
+its existing per-packet confirmation; the OLED interface never transmits.
 
 The onboard SX1262 pin mapping, V4 RF front-end controls, and default radio type
 are compiled in. Attach the correct antenna before using the radio and configure
@@ -72,7 +76,8 @@ boot diagnostics.
 ## Hardware validation
 
 The firmware performs passive boot diagnostics without transmitting an RF
-packet. Press PRG four times from the WebUI network page to show the hardware page.
+packet. From the root OLED menu, hold PRG on **Dashboard**, advance to
+**Hardware** with single presses, then hold PRG to open the hardware page.
 Authenticated WebUI sessions can also read the same machine-readable status at
 `/api/heltec/status`.
 
