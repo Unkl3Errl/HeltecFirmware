@@ -438,10 +438,8 @@ void setup() {
     _post_setup_gpio();
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     extern void heltecFieldLoggerBegin();
-    extern void heltecMarauderWifiBegin();
     heltecV4DrawBootStage("Loading field logs");
     heltecFieldLoggerBegin();
-    heltecMarauderWifiBegin();
     heltecV4DrawBootStage("Starting services");
 #endif
     // Some board interfaces initialize or reset the backlight in post-setup,
