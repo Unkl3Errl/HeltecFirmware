@@ -535,11 +535,9 @@ def run(args: argparse.Namespace) -> None:
         require(isinstance(field_log.get("sessionId"), int), "field-log session ID is invalid")
         field_gps = field_log.get("gps")
         field_ble = field_log.get("ble")
-        field_wifi = field_log.get("wifi")
         field_storage = field_log.get("storage")
         require(isinstance(field_gps, dict), "field-log GPS status is missing")
         require(isinstance(field_ble, dict), "field-log BLE status is missing")
-        require(isinstance(field_wifi, dict), "field-log Wi-Fi status is missing")
         require(isinstance(field_storage, dict), "field-log storage status is missing")
         require(
             isinstance(field_gps.get("fixes"), int) and field_gps["fixes"] >= 0,
@@ -558,15 +556,6 @@ def run(args: argparse.Namespace) -> None:
             isinstance(field_ble.get("uniqueDevices"), int)
             and 0 <= field_ble["uniqueDevices"] <= int(field_ble.get("uniqueCapacity", -1)),
             "field-log BLE unique-device counter is invalid",
-        )
-        require(
-            isinstance(field_wifi.get("observations"), int) and field_wifi["observations"] >= 0,
-            "field-log Wi-Fi observation counter is invalid",
-        )
-        require(
-            isinstance(field_wifi.get("uniqueNetworks"), int)
-            and 0 <= field_wifi["uniqueNetworks"] <= int(field_wifi.get("uniqueCapacity", -1)),
-            "field-log Wi-Fi unique-network counter is invalid",
         )
         total_storage = int(field_storage.get("totalBytes", 0))
         used_storage = int(field_storage.get("usedBytes", -1))
@@ -625,12 +614,9 @@ def run(args: argparse.Namespace) -> None:
             "formatVersion": 1,
             "exportedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "hardware": board_status,
-            "capabilities": capabilities,
             "gpsTrack": gps_track,
             "loraStatus": initial_lora,
             "loraHistory": history,
-            "wifiStatus": wifi_status,
-            "wifiResults": wifi_results,
             "fieldLog": field_log,
             "fieldLogFiles": field_log_files,
         }
@@ -641,12 +627,9 @@ def run(args: argparse.Namespace) -> None:
                 "formatVersion",
                 "exportedAt",
                 "hardware",
-                "capabilities",
                 "gpsTrack",
                 "loraStatus",
                 "loraHistory",
-                "wifiStatus",
-                "wifiResults",
                 "fieldLog",
                 "fieldLogFiles",
             },
