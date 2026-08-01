@@ -46,6 +46,11 @@ installation, and passive post-flash checks.
 The complete pin map, endpoint contract, safety constraints, and target-board
 validation record are in [HELTEC_V4_PORT.md](HELTEC_V4_PORT.md).
 
+The separate standalone Marauder adaptation for this board is released at
+[ESP32Marauder v1.14.0-heltec.2](https://github.com/Unkl3Errl/ESP32Marauder/releases/tag/v1.14.0-heltec.2).
+Use the [installation guide](INSTALL.md) for firmware selection, flash offsets,
+checksums, recovery, and Android connection modes.
+
 ## Android controller
 
 The canonical Android companion is
