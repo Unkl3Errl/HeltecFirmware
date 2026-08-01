@@ -539,9 +539,11 @@ void setup() {
     _post_setup_gpio();
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     extern void heltecFieldLoggerBegin();
+    extern void heltecV4BeginStandaloneMenu();
     heltecV4DrawBootStage("Loading field logs");
     heltecFieldLoggerBegin();
     heltecV4DrawBootStage("Starting services");
+    heltecV4BeginStandaloneMenu();
 #endif
     // Some board interfaces initialize or reset the backlight in post-setup,
     // so re-apply the stored brightness after that stage completes.
