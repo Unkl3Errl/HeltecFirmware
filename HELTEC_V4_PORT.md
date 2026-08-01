@@ -266,8 +266,19 @@ checkout has a Python 3.13 virtual environment:
 PATH="$PWD/.venv313/bin:$PATH" pio run -e heltec-wifi-lora-32-v4
 ```
 
-The merged image is written to `Bruce-heltec-wifi-lora-32-v4.bin` and is
-flashed at offset `0x0`.
+The merged factory image is written to `Bruce-heltec-wifi-lora-32-v4.bin` and
+is flashed at offset `0x0`. The same build also writes
+`Bruce-heltec-wifi-lora-32-v4-app.bin`; flashing that application-only image at
+offset `0x10000` preserves NVS and LittleFS during upgrades when the partition
+layout is unchanged. The merged image ends before LittleFS in this layout but
+fills the NVS gap with erased bytes, so an offset-`0x0` factory flash resets
+saved settings. A full-chip erase removes both NVS and LittleFS.
+
+The build hook derives `BRUCE_VERSION` and `GIT_COMMIT_HASH` from an exact
+firmware release tag and the current Git commit. Untagged builds remain visibly
+marked `dev`, dirty local builds append `-dirty`, and `vX.Y.Z` tag builds report
+`X.Y.Z`. `validate_firmware_metadata.py` confirms that both resolved strings
+are present in the merged image and rejects the former `Homebrew` placeholder.
 
 ## Upload
 

@@ -71,13 +71,52 @@ is:
 pio run -e heltec-wifi-lora-32-v4
 ```
 
-The merged flash image is written to `Bruce-heltec-wifi-lora-32-v4.bin`.
+The build produces two images:
+
+- `Bruce-heltec-wifi-lora-32-v4.bin` is the merged factory image for offset
+  `0x0`.
+- `Bruce-heltec-wifi-lora-32-v4-app.bin` is the application-only upgrade image
+  for offset `0x10000`. Use it to preserve NVS settings and LittleFS data when
+  upgrading from a release with the same partition layout.
+
+Firmware builds are self-identifying. Untagged builds report version `dev` and
+the current short Git commit; exact `vX.Y.Z` firmware tags report version
+`X.Y.Z`. A modified local checkout appends `-dirty` to its commit identity.
+Release automation can set `HELTEC_FIRMWARE_VERSION` and
+`HELTEC_FIRMWARE_COMMIT` explicitly. Verify that the resolved values are
+actually embedded in the merged image with:
+
+```sh
+python3 boards/heltec-wifi-lora-32-v4/validate_firmware_metadata.py \
+  Bruce-heltec-wifi-lora-32-v4.bin
+```
 
 ## Flash
+
+For an in-place application upgrade that preserves settings and data:
+
+```sh
+esptool --chip esp32s3 --port /dev/cu.usbmodem101 write-flash \
+  0x10000 Bruce-heltec-wifi-lora-32-v4-app.bin
+```
+
+For a normal source upload, PlatformIO writes the bootloader, partition table,
+and application at their individual offsets without filling the NVS gap:
 
 ```sh
 pio run -e heltec-wifi-lora-32-v4 -t upload --upload-port /dev/cu.usbmodem101
 ```
+
+For a factory or recovery flash, write the merged image at offset `0x0`:
+
+```sh
+esptool --chip esp32s3 --port /dev/cu.usbmodem101 write-flash \
+  0x0 Bruce-heltec-wifi-lora-32-v4.bin
+```
+
+The merged image fills the NVS region with erased bytes and therefore resets
+saved settings. It ends before the LittleFS partition in this layout, but a
+separate full-chip erase also removes LittleFS field logs and other stored data.
 
 Adjust the serial port for the connected board. If automatic upload does not
 start, hold PRG/BOOT, tap RST, release PRG/BOOT, and retry.

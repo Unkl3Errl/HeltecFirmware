@@ -1,5 +1,6 @@
 from pathlib import Path
 import csv
+from shutil import copyfile
 from SCons.Script import Import
 
 # Import PlatformIO's SCons environment
@@ -34,6 +35,7 @@ part_bin = build_dir / "partitions.bin"
 app_bin  = build_dir / "firmware.bin"
 
 out_bin  = proj_dir / f"Bruce-{pioenv}.bin"
+out_app_bin = proj_dir / f"Bruce-{pioenv}-app.bin"
 
 # Esptool from PlatformIO + Python executable
 esptool_pkg = senv.PioPlatform().get_package_dir("tool-esptoolpy")
@@ -120,6 +122,11 @@ def _merge_bins_callback(target, source, env):
         except FileNotFoundError:
             size = 0
         print(f"[merge_bin] Success -> {out_bin} ({size} bytes)")
+        copyfile(app_bin, out_app_bin)
+        print(
+            f"[app_bin] Success -> {out_app_bin} "
+            f"({out_app_bin.stat().st_size} bytes)"
+        )
         if ota0_offset:
             if size < (ota0_offset + ota_size):
                 print("[Final bin] Valid bin to upload")

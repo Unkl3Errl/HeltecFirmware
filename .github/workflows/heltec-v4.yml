@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+    tags: ["v*.*.*"]
   workflow_dispatch:
 
 concurrency:
@@ -28,13 +29,25 @@ jobs:
           sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
           pip install platformio requests esptool intelhex
 
+      - name: Test firmware metadata resolution
+        run: python3 -m unittest discover -s boards/heltec-wifi-lora-32-v4 -p 'test_*.py'
+
       - name: Build Heltec V4 firmware
         run: platformio run -e heltec-wifi-lora-32-v4
+
+      - name: Verify embedded firmware metadata
+        run: |
+          python3 boards/heltec-wifi-lora-32-v4/validate_firmware_metadata.py \
+            Bruce-heltec-wifi-lora-32-v4.bin
+          python3 boards/heltec-wifi-lora-32-v4/validate_firmware_metadata.py \
+            Bruce-heltec-wifi-lora-32-v4-app.bin
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v7
         with:
           name: Bruce-heltec-wifi-lora-32-v4
-          path: Bruce-heltec-wifi-lora-32-v4.bin
+          path: |
+            Bruce-heltec-wifi-lora-32-v4.bin
+            Bruce-heltec-wifi-lora-32-v4-app.bin
           retention-days: 5
           if-no-files-found: error
