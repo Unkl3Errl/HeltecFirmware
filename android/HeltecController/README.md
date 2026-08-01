@@ -17,9 +17,14 @@ the interfaces that the current builds already expose.
 - Android 10 (API 29) or newer.
 - A phone that supports USB host mode and a data-capable USB-C OTG connection
   for Marauder.
-- Heltec Firmware `v0.2.1` or newer running in WebUI mode for BruceNet.
+- Heltec Firmware `v0.2.2` or newer running in WebUI mode for BruceNet.
 - ESP32 Marauder `v1.14.0-heltec.2` or newer running on the USB-connected
   device.
+
+The permanent signed APK and its SHA-256 are linked from the repository's
+[`INSTALL.md`](../../INSTALL.md). That guide also explains firmware selection,
+flash offsets, preservation boundaries, bootloader recovery, and the supported
+release set.
 
 ## BruceNet connection
 

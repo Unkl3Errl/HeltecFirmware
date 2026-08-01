@@ -9,6 +9,14 @@ the attached GNSS module. A bounded, passive Wi-Fi survey adapted from
 into Bruce's existing display, WebUI, radio, storage, and authentication
 lifecycles instead of running a second firmware stack.
 
+## Releases and installation
+
+Use [INSTALL.md](INSTALL.md) for the firmware choice matrix, permanent download
+links and SHA-256 hashes, data-preserving Bruce upgrades, factory switching,
+bootloader recovery, Android installation, and passive post-flash checks. The
+current supported set is unified firmware `v0.2.2`, standalone Marauder
+`v1.14.0-heltec.2`, and Android controller `v0.3.3`.
+
 ## Heltec V4 integration
 
 - Seven-page OLED status dashboard with PRG-button navigation, controls, and
