@@ -15,8 +15,12 @@ installation, and passive post-flash checks.
 
 ## Heltec V4 integration
 
-- Six-page OLED status dashboard with PRG-button navigation, controls, and
-  deep-sleep entry.
+- Marauder-style standalone OLED interface with scrolling nested menus,
+  inverted selection highlighting, and the same PRG gestures: one press moves
+  to the next item, two presses return, and a 0.9-second hold selects.
+- On-device controls for Bruce's supported GPS monitor, receive-only LoRa,
+  GPS+BLE field logger, diagnostics, persisted 15/30/45/60-second display
+  timeouts (or always on), confirmed PRG-wake sleep, and confirmed power down.
 - Authenticated WebUI hardware, network, memory, GPS, and LoRa diagnostics.
 - Live GNSS monitoring with a bounded 16-fix track and JSON/GPX export.
 - Reset-resistant LittleFS field logging that appends onboard or Android GPS

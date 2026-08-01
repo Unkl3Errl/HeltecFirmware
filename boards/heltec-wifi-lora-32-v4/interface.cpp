@@ -14,6 +14,12 @@
 #include <interface.h>
 #include <U8g2lib.h>
 #include <WiFi.h>
+#include <Wire.h>
+
+#if !defined(LITE_VERSION)
+bool heltecV4ToggleLoraReceiver(float frequencyMHz);
+void heltecV4PollLoraReceiver();
+#endif
 
 namespace {
 constexpr gpio_num_t kVextPin = GPIO_NUM_36;
@@ -23,8 +29,9 @@ constexpr uint8_t kOledClockPin = 18;
 constexpr uint8_t kOledDataPin = 17;
 constexpr gpio_num_t kBatteryAdcPin = GPIO_NUM_1;
 constexpr gpio_num_t kBatteryAdcControlPin = GPIO_NUM_37;
+constexpr uint32_t kDebounceMs = 30;
+constexpr uint32_t kClickWindowMs = 550;
 constexpr uint32_t kLongPressMs = 900;
-constexpr uint32_t kSleepHoldMs = 2000;
 constexpr size_t kGpsTrackCapacity = 16;
 constexpr uint32_t kGpsTrackMinimumIntervalMs = 5000;
 #ifdef LORA_DEFAULT_FREQUENCY_HZ
@@ -33,13 +40,10 @@ constexpr float kPassiveRadioFrequencyMHz = static_cast<float>(LORA_DEFAULT_FREQ
 constexpr float kPassiveRadioFrequencyMHz = 915.0f;
 #endif
 
-U8G2_SSD1306_128X64_NONAME_F_SW_I2C oled(
-    U8G2_R0, kOledClockPin, kOledDataPin, kOledResetPin
-);
-bool webUiStatusVisible = false;
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, kOledResetPin);
+volatile bool oledUiReady = false;
 bool webUiApMode = true;
 uint8_t statusPage = 0;
-constexpr uint8_t kStatusPageCount = 6;
 int16_t radioDiagnostic = RADIOLIB_ERR_UNKNOWN;
 int16_t radioReceiveDiagnostic = RADIOLIB_ERR_UNKNOWN;
 uint32_t gpsDiagnosticBytes = 0;
@@ -49,6 +53,149 @@ bool gpsDiagnosticFix = false;
 String oledActionMessage;
 uint8_t oledActionPage = 0;
 uint32_t oledActionMessageMs = 0;
+
+enum class OledScreen : uint8_t {
+    Boot,
+    Root,
+    Dashboard,
+    Gps,
+    Lora,
+    FieldLog,
+    System,
+    Display,
+    Status,
+    Confirm,
+    DeviceInfo,
+    Help,
+};
+
+enum class OledGesture : uint8_t {
+    Single,
+    Double,
+    Long,
+};
+
+enum OledAction : int16_t {
+    kOpenDashboard = -1,
+    kOpenGps = -2,
+    kOpenLora = -3,
+    kOpenFieldLog = -4,
+    kOpenSystem = -5,
+    kOpenDisplay = -6,
+    kShowNetwork = -7,
+    kShowLogin = -8,
+    kShowGps = -9,
+    kShowLora = -10,
+    kShowFieldLog = -11,
+    kShowHardware = -12,
+    kShowDeviceInfo = -13,
+    kShowHelp = -14,
+    kToggleGps = -15,
+    kToggleLora = -16,
+    kStartFieldLog = -17,
+    kStopFieldLog = -18,
+    kTimeoutOff = -19,
+    kTimeout15 = -20,
+    kTimeout30 = -21,
+    kTimeout45 = -22,
+    kTimeout60 = -23,
+    kSleep = -24,
+    kPowerDown = -25,
+    kBack = -26,
+};
+
+struct OledMenuItem {
+    const char *label;
+    int16_t action;
+    bool requiresConfirmation;
+};
+
+constexpr OledMenuItem kRootMenu[] = {
+    {"Dashboard", kOpenDashboard, false},
+    {"GPS monitor", kOpenGps, false},
+    {"LoRa receiver", kOpenLora, false},
+    {"Field logger", kOpenFieldLog, false},
+    {"System", kOpenSystem, false},
+};
+
+constexpr OledMenuItem kDashboardMenu[] = {
+    {"Network", kShowNetwork, false},
+    {"WebUI login", kShowLogin, false},
+    {"GPS status", kShowGps, false},
+    {"LoRa status", kShowLora, false},
+    {"Field-log status", kShowFieldLog, false},
+    {"Hardware", kShowHardware, false},
+    {"Back", kBack, false},
+};
+
+constexpr OledMenuItem kGpsMenu[] = {
+    {"Status", kShowGps, false},
+    {"Toggle monitor", kToggleGps, false},
+    {"Back", kBack, false},
+};
+
+constexpr OledMenuItem kLoraMenu[] = {
+    {"Status", kShowLora, false},
+    {"Toggle receiver", kToggleLora, false},
+    {"Back", kBack, false},
+};
+
+constexpr OledMenuItem kFieldLogMenu[] = {
+    {"Status", kShowFieldLog, false},
+    {"Start GPS + BLE", kStartFieldLog, false},
+    {"Stop logging", kStopFieldLog, false},
+    {"Back", kBack, false},
+};
+
+constexpr OledMenuItem kSystemMenu[] = {
+    {"Network info", kShowNetwork, false},
+    {"WebUI login", kShowLogin, false},
+    {"Hardware status", kShowHardware, false},
+    {"Device info", kShowDeviceInfo, false},
+    {"Display timeout", kOpenDisplay, false},
+    {"Button help", kShowHelp, false},
+    {"Sleep (PRG wake)", kSleep, true},
+    {"Power down", kPowerDown, true},
+    {"Back", kBack, false},
+};
+
+constexpr OledMenuItem kDisplayMenu[] = {
+    {"Always on", kTimeoutOff, false},
+    {"Turn off after 15s", kTimeout15, false},
+    {"Turn off after 30s", kTimeout30, false},
+    {"Turn off after 45s", kTimeout45, false},
+    {"Turn off after 60s", kTimeout60, false},
+    {"Back", kBack, false},
+};
+
+OledScreen oledScreen = OledScreen::Boot;
+OledScreen oledReturnScreen = OledScreen::Root;
+uint8_t oledSelected = 0;
+uint8_t oledClickCount = 0;
+bool oledRawPressed = false;
+bool oledStablePressed = false;
+bool oledLongDispatched = false;
+bool oledWakePress = false;
+bool oledScreenBlanked = false;
+uint8_t oledScreenTimeoutSeconds = 60;
+uint32_t oledRawChangedAt = 0;
+uint32_t oledPressedAt = 0;
+uint32_t oledClickDeadline = 0;
+uint32_t oledLastInteraction = 0;
+uint32_t oledLastRender = 0;
+int16_t oledPendingAction = 0;
+const char *oledPendingLabel = nullptr;
+String oledNotice;
+uint32_t oledNoticeUntil = 0;
+TaskHandle_t oledInputTaskHandle = nullptr;
+
+void renderOledUi();
+void pollOledButton(uint32_t now);
+void oledInputTask(void *parameter);
+void dispatchOledGesture(OledGesture gesture);
+void selectOledItem();
+void goBackOled();
+[[noreturn]] void enterHeltecDeepSleep(bool wakeOnButton);
 
 struct GpsLiveStatus {
     uint32_t bytes = 0;
@@ -252,6 +399,95 @@ void setOledActionMessage(uint8_t page, const String &message) {
     oledActionMessageMs = millis();
 }
 
+template <size_t N> constexpr uint8_t itemCount(const OledMenuItem (&)[N]) {
+    return static_cast<uint8_t>(N);
+}
+
+const OledMenuItem *menuFor(OledScreen screen) {
+    switch (screen) {
+        case OledScreen::Root: return kRootMenu;
+        case OledScreen::Dashboard: return kDashboardMenu;
+        case OledScreen::Gps: return kGpsMenu;
+        case OledScreen::Lora: return kLoraMenu;
+        case OledScreen::FieldLog: return kFieldLogMenu;
+        case OledScreen::System: return kSystemMenu;
+        case OledScreen::Display: return kDisplayMenu;
+        default: return nullptr;
+    }
+}
+
+uint8_t menuSize(OledScreen screen) {
+    switch (screen) {
+        case OledScreen::Root: return itemCount(kRootMenu);
+        case OledScreen::Dashboard: return itemCount(kDashboardMenu);
+        case OledScreen::Gps: return itemCount(kGpsMenu);
+        case OledScreen::Lora: return itemCount(kLoraMenu);
+        case OledScreen::FieldLog: return itemCount(kFieldLogMenu);
+        case OledScreen::System: return itemCount(kSystemMenu);
+        case OledScreen::Display: return itemCount(kDisplayMenu);
+        default: return 0;
+    }
+}
+
+const char *menuTitle(OledScreen screen) {
+    switch (screen) {
+        case OledScreen::Root: return "BRUCE / HELTEC";
+        case OledScreen::Dashboard: return "DASHBOARD";
+        case OledScreen::Gps: return "GPS MONITOR";
+        case OledScreen::Lora: return "LORA RECEIVER";
+        case OledScreen::FieldLog: return "FIELD LOGGER";
+        case OledScreen::System: return "SYSTEM";
+        case OledScreen::Display: return "DISPLAY TIMEOUT";
+        default: return "BRUCE";
+    }
+}
+
+void drawMenuHeader(const char *title) {
+    oled.setFont(u8g2_font_6x10_tf);
+    String clipped = title ? title : "BRUCE";
+    if (clipped.length() > 21) clipped.remove(21);
+    oled.drawUTF8(0, 10, clipped.c_str());
+    oled.drawHLine(0, 12, 128);
+}
+
+void drawMenuLine(uint8_t row, const String &value, bool selected) {
+    const uint8_t y = 16 + row * 10;
+    String clipped = value;
+    if (clipped.length() > 20) clipped.remove(20);
+    oled.setFont(u8g2_font_5x8_tf);
+    if (selected) {
+        oled.drawBox(0, y - 1, 128, 9);
+        oled.setDrawColor(0);
+        oled.drawUTF8(2, y + 7, (String("> ") + clipped).c_str());
+        oled.setDrawColor(1);
+    } else {
+        oled.drawUTF8(2, y + 7, (String("  ") + clipped).c_str());
+    }
+}
+
+void renderOledMenu() {
+    oled.clearBuffer();
+    drawMenuHeader(menuTitle(oledScreen));
+
+    const OledMenuItem *menu = menuFor(oledScreen);
+    const uint8_t count = menuSize(oledScreen);
+    if (menu && count) {
+        uint8_t first = oledSelected > 2 ? oledSelected - 2 : 0;
+        if (count > 4 && first > count - 4) first = count - 4;
+        for (uint8_t row = 0; row < 4 && first + row < count; row++) {
+            drawMenuLine(row, menu[first + row].label, first + row == oledSelected);
+        }
+    }
+
+    oled.setFont(u8g2_font_4x6_tf);
+    if (oledNotice.length() && millis() < oledNoticeUntil) {
+        oled.drawUTF8(0, 63, oledNotice.c_str());
+    } else {
+        oled.drawUTF8(0, 63, "1x next 2x back hold select");
+    }
+    oled.sendBuffer();
+}
+
 void drawWebUiPage() {
     oled.clearBuffer();
     oled.setFont(u8g2_font_6x12_tf);
@@ -266,7 +502,7 @@ void drawWebUiPage() {
     if (statusPage == 1) {
         drawLine(29, "User: " + bruceConfig.webUI.user);
         drawLine(41, "Pass: " + bruceConfig.webUI.pwd);
-        drawLine(57, "PRG: live GPS");
+        drawLine(57, "2x: back");
     } else if (statusPage == 2) {
         GpsLiveStatus live;
         portENTER_CRITICAL(&gpsLiveMux);
@@ -291,10 +527,10 @@ void drawWebUiPage() {
             drawLine(
                 51,
                 hasOledActionMessage(2) ? oledActionMessage
-                                        : (gpsMonitorRunning ? "Waiting for GPS fix" : "Hold to start GPS")
+                                        : (gpsMonitorRunning ? "Waiting for GPS fix" : "Use menu to start GPS")
             );
         }
-        drawLine(63, "Tap>LoRa Hold>toggle");
+        drawLine(63, "2x: back");
     } else if (statusPage == 3) {
 #if !defined(LITE_VERSION)
         const LoRaRuntimeSnapshot lora = loraRuntimeSnapshot();
@@ -309,7 +545,7 @@ void drawWebUiPage() {
             41,
             lora.hasPacket
                 ? "RSSI " + String(lora.lastRssiDbm, 0) + " SNR " + String(lora.lastSnrDb, 1)
-                : (lora.listening ? "Waiting for packets" : "Hold to start RX")
+                : (lora.listening ? "Waiting for packets" : "Use menu to start RX")
         );
         drawLine(
             53,
@@ -321,7 +557,7 @@ void drawWebUiPage() {
 #else
         drawLine(35, "LoRa unavailable");
 #endif
-        drawLine(63, "Tap>HW Hold>toggle");
+        drawLine(63, "2x: back");
     } else if (statusPage == 4) {
         drawLine(
             29,
@@ -338,7 +574,7 @@ void drawWebUiPage() {
                 ? oledActionMessage
                 : (batteryMv > 2500 ? "Battery: " + String(batteryMv) + "mV" : "Battery: not found")
         );
-        drawLine(63, "Tap>Log Hold2s>sleep");
+        drawLine(63, "2x: back");
     } else if (statusPage == 5) {
         const HeltecFieldLogSnapshot fieldLog = heltecFieldLoggerSnapshot();
         drawLine(
@@ -357,27 +593,114 @@ void drawWebUiPage() {
                 ? oledActionMessage
                 : "S" + String(fieldLog.sessionId) + " " + String(fieldLog.sessionBytes / 1024) + "KiB"
         );
-        drawLine(63, "Tap>Net Hold>toggle");
+        drawLine(63, "2x: back");
     } else if (webUiApMode) {
         drawLine(29, "WiFi: " + bruceConfig.wifiAp.ssid);
         drawLine(41, "Pass: " + bruceConfig.wifiAp.pwd);
         drawLine(53, WiFi.softAPIP().toString());
-        drawLine(63, "PRG: login");
+        drawLine(63, "2x: back");
     } else {
         drawLine(29, "Connected to WiFi");
         drawLine(41, WiFi.localIP().toString());
         drawLine(53, "http://bruce.local");
-        drawLine(63, "PRG: login");
+        drawLine(63, "2x: back");
     }
     oled.sendBuffer();
 }
+
+void renderOledConfirm() {
+    oled.clearBuffer();
+    drawMenuHeader(oledPendingAction == kPowerDown ? "POWER DOWN" : "SLEEP");
+    oled.setFont(u8g2_font_5x8_tf);
+    oled.drawUTF8(0, 25, oledPendingLabel ? oledPendingLabel : "Power action");
+    oled.drawUTF8(
+        0,
+        37,
+        oledPendingAction == kSleep ? "PRG wakes + restarts" : "RST/power cycle wakes"
+    );
+    oled.drawUTF8(0, 49, "Hold: confirm");
+    oled.drawUTF8(0, 61, "1x / 2x: cancel");
+    oled.sendBuffer();
+}
+
+void renderOledDeviceInfo() {
+    oled.clearBuffer();
+    drawMenuHeader("DEVICE INFO");
+    oled.setFont(u8g2_font_5x8_tf);
+    oled.drawUTF8(0, 24, "Heltec WiFi LoRa V4");
+    String line = String("Bruce ") + BRUCE_VERSION;
+    if (line.length() > 24) line.remove(24);
+    oled.drawUTF8(0, 35, line.c_str());
+    const uint16_t batteryMv = readBatteryMillivolts();
+    line = batteryMv > 2500 ? "Battery " + String(batteryMv) + " mV" : "Battery: USB/no cell";
+    oled.drawUTF8(0, 46, line.c_str());
+    line = webUiApMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+    oled.drawUTF8(0, 57, line.c_str());
+    oled.sendBuffer();
+}
+
+void renderOledHelp() {
+    oled.clearBuffer();
+    drawMenuHeader("PRG BUTTON");
+    oled.setFont(u8g2_font_5x8_tf);
+    oled.drawUTF8(0, 23, "1x      next item");
+    oled.drawUTF8(0, 33, "2x      back / stop");
+    oled.drawUTF8(0, 43, "Long    select / start");
+    oled.drawUTF8(0, 53, "Long press = 0.9 sec");
+    oled.drawUTF8(0, 63, "First press wakes screen");
+    oled.sendBuffer();
+}
+
+void renderOledUi() {
+    if (!oledUiReady || oledScreen == OledScreen::Boot || oledScreenBlanked) return;
+    switch (oledScreen) {
+        case OledScreen::Status: drawWebUiPage(); break;
+        case OledScreen::Confirm: renderOledConfirm(); break;
+        case OledScreen::DeviceInfo: renderOledDeviceInfo(); break;
+        case OledScreen::Help: renderOledHelp(); break;
+        default: renderOledMenu(); break;
+    }
+}
+
+void initializeStandaloneOledUi() {
+    const bool supportedTimeout =
+        bruceConfig.dimmerSet == 0 || bruceConfig.dimmerSet == 15 || bruceConfig.dimmerSet == 30 ||
+        bruceConfig.dimmerSet == 45 || bruceConfig.dimmerSet == 60;
+    oledScreenTimeoutSeconds = supportedTimeout ? static_cast<uint8_t>(bruceConfig.dimmerSet) : 60;
+    if (!supportedTimeout) bruceConfig.setDimmer(oledScreenTimeoutSeconds);
+
+    oledUiReady = true;
+    oledScreen = OledScreen::Root;
+    oledReturnScreen = OledScreen::Root;
+    oledSelected = 0;
+    oledNotice = "Ready";
+    oledNoticeUntil = millis() + 1200;
+    oledLastInteraction = millis();
+    oledScreenBlanked = false;
+    oled.setPowerSave(0);
+    renderOledUi();
+
+    if (
+        !oledInputTaskHandle &&
+        xTaskCreate(oledInputTask, "HeltecOledInput", 4096, nullptr, 3, &oledInputTaskHandle) != pdPASS
+    ) {
+        oledInputTaskHandle = nullptr;
+        Serial.println("[HELTEC] Could not start dedicated OLED input task");
+    }
+}
+}
+
+void heltecV4BeginStandaloneMenu() {
+    webUiApMode = true;
+    initializeStandaloneOledUi();
 }
 
 void heltecV4DrawWebUiStatus(bool apMode) {
     webUiApMode = apMode;
-    webUiStatusVisible = true;
-    statusPage = 0;
-    drawWebUiPage();
+    if (!oledUiReady) initializeStandaloneOledUi();
+    oledNotice = "WebUI ready";
+    oledNoticeUntil = millis() + 1200;
+    renderOledUi();
 }
 
 void heltecV4DrawBootStage(const char *stage) {
@@ -394,6 +717,11 @@ void _setup_gpio() {
     pinMode(kVextPin, OUTPUT);
     digitalWrite(kVextPin, LOW);
     pinMode(kButtonPin, INPUT_PULLUP);
+    oledRawPressed = digitalRead(kButtonPin) == LOW;
+    oledStablePressed = oledRawPressed;
+    oledRawChangedAt = millis();
+    oledLastInteraction = oledRawChangedAt;
+    oledScreen = OledScreen::Boot;
     pinMode(kBatteryAdcControlPin, OUTPUT);
     digitalWrite(kBatteryAdcControlPin, LOW);
     setGpsPower(false);
@@ -408,13 +736,17 @@ void _setup_gpio() {
     digitalWrite(LORA_FEM_TX, LOW);
 
     delay(50);
+    Wire.begin(kOledDataPin, kOledClockPin);
+    oled.setI2CAddress(0x3C << 1);
+    oled.setBusClock(400000);
     oled.begin();
+    oled.setFontMode(1);
     oled.clearBuffer();
     oled.setFont(u8g2_font_6x12_tf);
     drawLine(13, "BRUCE / HELTEC V4");
     oled.drawHLine(0, 16, 128);
     drawLine(34, "Starting firmware...");
-    drawLine(50, "WebUI mode");
+    drawLine(50, "Standalone + WebUI");
     oled.sendBuffer();
 
     // Bruce's graphical UI requires a color TFT. Start the supported headless
@@ -714,8 +1046,337 @@ bool isCharging() { return false; }
 
 void _setBrightness(uint8_t brightval) { (void)brightval; }
 
+namespace {
+void showOledStatus(uint8_t page, OledScreen returnScreen) {
+    statusPage = page;
+    oledReturnScreen = returnScreen;
+    oledScreen = OledScreen::Status;
+    oledSelected = 0;
+}
+
+void setOledTimeout(uint8_t seconds) {
+    oledScreenTimeoutSeconds = seconds;
+    bruceConfig.setDimmer(seconds);
+    oledLastInteraction = millis();
+    previousMillis = oledLastInteraction;
+    oledNotice = seconds == 0 ? "Screen always on" : "Screen off after " + String(seconds) + "s";
+    oledNoticeUntil = oledLastInteraction + 1800;
+    oledSelected = 0;
+}
+
+void toggleGpsFromOled() {
+    bool ok = false;
+    String message;
+    const bool enable = gpsMonitorTaskHandle == nullptr;
+    if (gpsExclusiveUse) {
+        message = "GPS busy";
+    } else if (gpsMonitorTaskHandle && gpsMonitorStopRequested) {
+        message = "GPS stopping";
+    } else if (gpsMonitorTaskHandle && heltecFieldLoggerUsesGps()) {
+        message = "Field log owns GPS";
+    } else {
+        ok = heltecV4SetGpsMonitor(enable);
+        message = ok ? (enable ? "GPS starting" : "GPS stopping") : "GPS action failed";
+        Serial.printf(
+            "[HELTEC] OLED GPS monitor %s: %s\n",
+            enable ? "start" : "stop",
+            ok ? "ok" : "failed"
+        );
+    }
+    setOledActionMessage(2, message);
+    showOledStatus(2, OledScreen::Gps);
+}
+
+void toggleLoraFromOled() {
+#if !defined(LITE_VERSION)
+    const LoRaRuntimeSnapshot before = loraRuntimeSnapshot();
+    const float frequencyMHz =
+        before.frequencyMHz > 0.0f ? before.frequencyMHz : kPassiveRadioFrequencyMHz;
+    const bool ok = heltecV4ToggleLoraReceiver(frequencyMHz);
+    const LoRaRuntimeSnapshot after = loraRuntimeSnapshot();
+    setOledActionMessage(
+        3,
+        ok ? (after.listening ? "LoRa RX started" : "LoRa RX stopped") : "LoRa action failed"
+    );
+    Serial.printf(
+        "[HELTEC] OLED LoRa RX %s at %.3f MHz: %s\n",
+        before.listening ? "stop" : "start",
+        frequencyMHz,
+        ok ? "ok" : "failed"
+    );
+#else
+    setOledActionMessage(3, "LoRa unavailable");
+#endif
+    showOledStatus(3, OledScreen::Lora);
+}
+
+void setFieldLogFromOled(bool enable) {
+    const bool wasActive = heltecFieldLoggerIsActive();
+    const bool ok = enable ? (wasActive || heltecFieldLoggerStart(true, true, true))
+                           : (!wasActive || heltecFieldLoggerStop());
+    setOledActionMessage(
+        5,
+        ok ? (enable ? (wasActive ? "Log already active" : "Log started")
+                     : (wasActive ? "Log stopped" : "Log already stopped"))
+           : "Log action failed"
+    );
+    Serial.printf(
+        "[HELTEC] OLED field logger %s: %s\n",
+        enable ? "start" : "stop",
+        ok ? "ok" : "failed"
+    );
+    showOledStatus(5, OledScreen::FieldLog);
+}
+
+void goBackOled() {
+    switch (oledScreen) {
+        case OledScreen::Status:
+        case OledScreen::Confirm: oledScreen = oledReturnScreen; break;
+        case OledScreen::DeviceInfo:
+        case OledScreen::Help:
+        case OledScreen::Display: oledScreen = OledScreen::System; break;
+        case OledScreen::Dashboard:
+        case OledScreen::Gps:
+        case OledScreen::Lora:
+        case OledScreen::FieldLog:
+        case OledScreen::System: oledScreen = OledScreen::Root; break;
+        default: break;
+    }
+    oledSelected = 0;
+}
+
+void selectOledItem() {
+    if (oledScreen == OledScreen::Status || oledScreen == OledScreen::DeviceInfo ||
+        oledScreen == OledScreen::Help) {
+        goBackOled();
+        return;
+    }
+    if (oledScreen == OledScreen::Confirm) {
+        if (oledPendingAction == kSleep) enterHeltecDeepSleep(true);
+        if (oledPendingAction == kPowerDown) enterHeltecDeepSleep(false);
+        return;
+    }
+
+    const OledMenuItem *menu = menuFor(oledScreen);
+    const uint8_t count = menuSize(oledScreen);
+    if (!menu || oledSelected >= count) return;
+    const OledMenuItem &item = menu[oledSelected];
+
+    if (item.requiresConfirmation) {
+        oledPendingAction = item.action;
+        oledPendingLabel = item.label;
+        oledReturnScreen = oledScreen;
+        oledScreen = OledScreen::Confirm;
+        return;
+    }
+
+    switch (item.action) {
+        case kOpenDashboard: oledScreen = OledScreen::Dashboard; break;
+        case kOpenGps: oledScreen = OledScreen::Gps; break;
+        case kOpenLora: oledScreen = OledScreen::Lora; break;
+        case kOpenFieldLog: oledScreen = OledScreen::FieldLog; break;
+        case kOpenSystem: oledScreen = OledScreen::System; break;
+        case kOpenDisplay: oledScreen = OledScreen::Display; break;
+        case kShowNetwork: showOledStatus(0, oledScreen); return;
+        case kShowLogin: showOledStatus(1, oledScreen); return;
+        case kShowGps: showOledStatus(2, oledScreen); return;
+        case kShowLora: showOledStatus(3, oledScreen); return;
+        case kShowHardware: showOledStatus(4, oledScreen); return;
+        case kShowFieldLog: showOledStatus(5, oledScreen); return;
+        case kShowDeviceInfo:
+            oledReturnScreen = OledScreen::System;
+            oledScreen = OledScreen::DeviceInfo;
+            return;
+        case kShowHelp:
+            oledReturnScreen = OledScreen::System;
+            oledScreen = OledScreen::Help;
+            return;
+        case kToggleGps: toggleGpsFromOled(); return;
+        case kToggleLora: toggleLoraFromOled(); return;
+        case kStartFieldLog: setFieldLogFromOled(true); return;
+        case kStopFieldLog: setFieldLogFromOled(false); return;
+        case kTimeoutOff: setOledTimeout(0); return;
+        case kTimeout15: setOledTimeout(15); return;
+        case kTimeout30: setOledTimeout(30); return;
+        case kTimeout45: setOledTimeout(45); return;
+        case kTimeout60: setOledTimeout(60); return;
+        case kBack: goBackOled(); return;
+        default: return;
+    }
+    oledSelected = 0;
+}
+
+void dispatchOledGesture(OledGesture gesture) {
+    oledLastInteraction = millis();
+    previousMillis = oledLastInteraction;
+    switch (gesture) {
+        case OledGesture::Single: {
+            if (oledScreen == OledScreen::Confirm) {
+                goBackOled();
+            } else if (
+                oledScreen != OledScreen::Status && oledScreen != OledScreen::DeviceInfo &&
+                oledScreen != OledScreen::Help
+            ) {
+                const uint8_t count = menuSize(oledScreen);
+                if (count) oledSelected = (oledSelected + 1) % count;
+            }
+            break;
+        }
+        case OledGesture::Double: goBackOled(); break;
+        case OledGesture::Long: selectOledItem(); break;
+    }
+    renderOledUi();
+    oledLastInteraction = millis();
+    previousMillis = oledLastInteraction;
+}
+
+void wakeOledScreen(uint32_t now) {
+    oledScreenBlanked = false;
+    isScreenOff = false;
+    dimmer = false;
+    oledLastInteraction = now;
+    previousMillis = now;
+    oled.setPowerSave(0);
+    renderOledUi();
+}
+
+void pollOledButton(uint32_t now) {
+    const bool pressed = digitalRead(kButtonPin) == LOW;
+    if (pressed != oledRawPressed) {
+        oledRawPressed = pressed;
+        oledRawChangedAt = now;
+        oledLastInteraction = now;
+        previousMillis = now;
+    }
+
+    if (now - oledRawChangedAt >= kDebounceMs && oledStablePressed != oledRawPressed) {
+        oledStablePressed = oledRawPressed;
+        if (oledStablePressed) {
+            oledLastInteraction = now;
+            if (oledScreenBlanked) {
+                oledWakePress = true;
+                oledLongDispatched = true;
+                oledClickCount = 0;
+                wakeOledScreen(now);
+                return;
+            }
+            oledPressedAt = now;
+            oledLongDispatched = false;
+        } else {
+            if (oledWakePress) {
+                oledWakePress = false;
+                oledLongDispatched = false;
+                oledClickCount = 0;
+                return;
+            }
+            const uint32_t duration = now - oledPressedAt;
+            if (!oledLongDispatched) {
+                if (duration >= kLongPressMs) {
+                    oledClickCount = 0;
+                    dispatchOledGesture(OledGesture::Long);
+                } else {
+                    if (oledClickCount < 2) oledClickCount++;
+                    oledClickDeadline = now + kClickWindowMs;
+                }
+            }
+        }
+    }
+
+    if (
+        oledStablePressed && !oledWakePress && !oledLongDispatched &&
+        now - oledPressedAt >= kLongPressMs
+    ) {
+        oledLongDispatched = true;
+        oledClickCount = 0;
+        dispatchOledGesture(OledGesture::Long);
+    }
+
+    if (
+        !oledRawPressed && !oledStablePressed && oledClickCount > 0 &&
+        now >= oledClickDeadline
+    ) {
+        const uint8_t completed = oledClickCount;
+        oledClickCount = 0;
+        dispatchOledGesture(completed == 1 ? OledGesture::Single : OledGesture::Double);
+    }
+}
+
+void serviceOledUi(uint32_t now) {
+    pollOledButton(now);
+    now = millis();
+
+    const bool interactionInProgress =
+        oledRawPressed || oledStablePressed || oledClickCount > 0;
+    if (
+        !oledScreenBlanked && oledScreenTimeoutSeconds > 0 && !interactionInProgress &&
+        now - oledLastInteraction >= static_cast<uint32_t>(oledScreenTimeoutSeconds) * 1000UL
+    ) {
+        oled.setPowerSave(1);
+        oledScreenBlanked = true;
+        isScreenOff = true;
+        dimmer = false;
+    }
+    if (oledScreenBlanked) return;
+
+    if (oledScreen == OledScreen::Status && now - oledLastRender >= 1000) {
+        oledLastRender = now;
+        renderOledUi();
+    } else if (oledNotice.length() && now >= oledNoticeUntil) {
+        oledNotice = "";
+        oledLastRender = now;
+        renderOledUi();
+    }
+}
+
+void oledInputTask(void *parameter) {
+    (void)parameter;
+    while (true) {
+        if (oledUiReady) serviceOledUi(millis());
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
+[[noreturn]] void enterHeltecDeepSleep(bool wakeOnButton) {
+    heltecFieldLoggerSuspendForSleep();
+    oled.clearBuffer();
+    drawMenuHeader(wakeOnButton ? "SLEEP" : "POWER DOWN");
+    oled.setFont(u8g2_font_5x8_tf);
+    oled.drawUTF8(0, 28, wakeOnButton ? "Press PRG to wake" : "Use RST or power cycle");
+    oled.drawUTF8(0, 42, "Stopping radios + GPS");
+    oled.drawUTF8(0, 56, "Entering deep sleep...");
+    oled.sendBuffer();
+
+#if !defined(LITE_VERSION)
+    const LoRaRuntimeSnapshot lora = loraRuntimeSnapshot();
+    if (lora.listening) {
+        heltecV4ToggleLoraReceiver(lora.frequencyMHz);
+    }
+#endif
+    gpsMonitorStopRequested = true;
+    setGpsPower(false);
+    digitalWrite(kBatteryAdcControlPin, LOW);
+    digitalWrite(LORA_FEM_TX, LOW);
+    digitalWrite(LORA_FEM_ENABLE, LOW);
+    digitalWrite(LORA_FEM_POWER, LOW);
+
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    while (digitalRead(kButtonPin) == LOW) delay(10);
+    if (wakeOnButton) esp_sleep_enable_ext0_wakeup(kButtonPin, LOW);
+
+    Serial.println(
+        wakeOnButton ? "[HELTEC] Sleeping; PRG wakes the device"
+                     : "[HELTEC] Powered down; RST or power cycle required"
+    );
+    Serial.flush();
+    delay(250);
+    oled.setPowerSave(1);
+    digitalWrite(kVextPin, HIGH);
+    esp_deep_sleep_start();
+    __builtin_unreachable();
+}
+} // namespace
+
 void InputHandler(void) {
-    checkPowerSaveTime();
     heltecFieldLoggerPoll();
     PrevPress = false;
     NextPress = false;
@@ -723,140 +1384,15 @@ void InputHandler(void) {
     AnyKeyPress = false;
     EscPress = false;
 
-    // In headless WebUI mode, a short PRG press cycles the OLED dashboard.
-    // Holding PRG on the GPS or LoRa page toggles that receive-side service.
-    // Do not feed the press into Bruce's full menu input state, where one
-    // button is insufficient.
-    static bool wasPressed = false;
-    static bool longPressHandled = false;
-    static bool wokeScreenOnPress = false;
-    static bool sleepOnRelease = false;
-    static uint32_t pressStartedMs = 0;
-    static uint32_t lastReleaseMs = 0;
-    static uint32_t lastLiveRefreshMs = 0;
-    const bool pressed = digitalRead(kButtonPin) == LOW;
-
 #if !defined(LITE_VERSION)
-    if (webUiStatusVisible) {
-        extern void heltecV4PollLoraReceiver();
+    if (oledUiReady) {
         heltecV4PollLoraReceiver();
     }
 #endif
-
-    if (pressed && !wasPressed) {
-        pressStartedMs = millis();
-        longPressHandled = false;
-        wokeScreenOnPress = wakeUpScreen();
-        sleepOnRelease = false;
-    }
-
-    if (
-        pressed && !longPressHandled && !wokeScreenOnPress && webUiStatusVisible &&
-        millis() - pressStartedMs >= kLongPressMs
-    ) {
-        if (statusPage == 2) {
-            longPressHandled = true;
-            bool ok = false;
-            if (gpsExclusiveUse) {
-                setOledActionMessage(2, "GPS busy");
-            } else if (gpsMonitorTaskHandle && gpsMonitorStopRequested) {
-                setOledActionMessage(2, "GPS stopping");
-            } else if (gpsMonitorTaskHandle && heltecFieldLoggerUsesGps()) {
-                setOledActionMessage(2, "Field log owns GPS");
-            } else {
-                const bool enable = gpsMonitorTaskHandle == nullptr;
-                ok = heltecV4SetGpsMonitor(enable);
-                setOledActionMessage(2, ok ? (enable ? "GPS starting" : "GPS stopping") : "GPS action failed");
-                Serial.printf(
-                    "[HELTEC] OLED GPS monitor %s: %s\n",
-                    enable ? "start" : "stop",
-                    ok ? "ok" : "failed"
-                );
-            }
-            drawWebUiPage();
-            lastLiveRefreshMs = millis();
-        } else if (statusPage == 3) {
-            longPressHandled = true;
-#if !defined(LITE_VERSION)
-            const LoRaRuntimeSnapshot before = loraRuntimeSnapshot();
-            const float frequencyMHz =
-                before.frequencyMHz > 0.0f ? before.frequencyMHz : kPassiveRadioFrequencyMHz;
-            extern bool heltecV4ToggleLoraReceiver(float frequencyMHz);
-            const bool ok = heltecV4ToggleLoraReceiver(frequencyMHz);
-            const LoRaRuntimeSnapshot after = loraRuntimeSnapshot();
-            setOledActionMessage(
-                3,
-                ok ? (after.listening ? "LoRa RX started" : "LoRa RX stopped") : "LoRa action failed"
-            );
-            Serial.printf(
-                "[HELTEC] OLED LoRa RX %s at %.3f MHz: %s\n",
-                before.listening ? "stop" : "start",
-                frequencyMHz,
-                ok ? "ok" : "failed"
-            );
-#else
-            setOledActionMessage(3, "LoRa unavailable");
-#endif
-            drawWebUiPage();
-            lastLiveRefreshMs = millis();
-        } else if (statusPage == 4 && millis() - pressStartedMs >= kSleepHoldMs) {
-            longPressHandled = true;
-            sleepOnRelease = true;
-            setOledActionMessage(4, "Release to sleep");
-            drawWebUiPage();
-            lastLiveRefreshMs = millis();
-        } else if (statusPage == 5) {
-            longPressHandled = true;
-            const bool wasActive = heltecFieldLoggerIsActive();
-            const bool ok = wasActive ? heltecFieldLoggerStop() : heltecFieldLoggerStart(true, true, true);
-            setOledActionMessage(
-                5,
-                ok ? (wasActive ? "Log stopped" : "Log started") : "Log action failed"
-            );
-            Serial.printf(
-                "[HELTEC] OLED field logger %s: %s\n",
-                wasActive ? "stop" : "start",
-                ok ? "ok" : "failed"
-            );
-            drawWebUiPage();
-            lastLiveRefreshMs = millis();
-        }
-    }
-
-    if (wasPressed && !pressed && millis() - lastReleaseMs > 250) {
-        lastReleaseMs = millis();
-        if (webUiStatusVisible && sleepOnRelease && !wokeScreenOnPress) {
-            sleepOnRelease = false;
-            setOledActionMessage(4, "Entering sleep...");
-            drawWebUiPage();
-            Serial.println("[HELTEC] OLED deep sleep requested");
-            delay(250);
-            powerOff();
-        } else if (webUiStatusVisible && !longPressHandled && !wokeScreenOnPress) {
-            statusPage = (statusPage + 1) % kStatusPageCount;
-            drawWebUiPage();
-            lastLiveRefreshMs = millis();
-        }
-    }
-    if (webUiStatusVisible && statusPage >= 2 && millis() - lastLiveRefreshMs >= 1000) {
-        lastLiveRefreshMs = millis();
-        drawWebUiPage();
-    }
-    wasPressed = pressed;
 }
 
 void powerOff() {
-    heltecFieldLoggerSuspendForSleep();
-    oled.setPowerSave(1);
-    digitalWrite(LORA_FEM_TX, LOW);
-    digitalWrite(LORA_FEM_ENABLE, LOW);
-    digitalWrite(LORA_FEM_POWER, LOW);
-    gpsMonitorStopRequested = true;
-    setGpsPower(false);
-    digitalWrite(kBatteryAdcControlPin, LOW);
-    digitalWrite(kVextPin, HIGH);
-    esp_sleep_enable_ext0_wakeup(kButtonPin, LOW);
-    esp_deep_sleep_start();
+    enterHeltecDeepSleep(true);
 }
 
 void checkReboot() {}
