@@ -11,40 +11,11 @@
 
 #include <MD5Builder.h>
 #include <algorithm> // for std::sort
-#include <esp_partition.h>
 #include <esp_rom_crc.h>
 
 // SPIClass sdcardSPI;
 String fileToCopy;
 std::vector<FileList> fileList;
-
-#ifdef HELTEC_ANDROID_STORAGE
-namespace {
-constexpr const char *kAndroidStoragePartition = "android";
-
-bool androidStoragePartitionIsBlank() {
-    const esp_partition_t *partition = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA,
-        ESP_PARTITION_SUBTYPE_DATA_FAT,
-        kAndroidStoragePartition
-    );
-    if (!partition) return false;
-
-    uint8_t buffer[512];
-    for (size_t offset = 0; offset < partition->size; offset += sizeof(buffer)) {
-        const size_t length = std::min<size_t>(
-            sizeof(buffer), static_cast<size_t>(partition->size) - offset
-        );
-        if (esp_partition_read(partition, offset, buffer, length) != ESP_OK) return false;
-        for (size_t index = 0; index < length; ++index) {
-            if (buffer[index] != 0xFF) return false;
-        }
-        if ((offset & 0xFFFF) == 0) delay(0);
-    }
-    return true;
-}
-} // namespace
-#endif
 
 /***************************************************************************************
 ** Function name: setupSdCard
@@ -53,20 +24,12 @@ bool androidStoragePartitionIsBlank() {
 bool setupSdCard() {
 #ifdef HELTEC_ANDROID_STORAGE
     if (sdcardMounted) return true;
-    const bool blankPartition = androidStoragePartitionIsBlank();
-    bool mounted = SD.begin(false, "/android", 10, kAndroidStoragePartition);
-    if (!mounted) {
-        if (blankPartition) {
-            char partitionLabel[] = "android";
-            SD.format(FFAT_WIPE_QUICK, partitionLabel);
-            mounted = SD.begin(false, "/android", 10, kAndroidStoragePartition);
-        }
-    }
-    if (!mounted) {
+    /* Preserve a valid spool, but format a blank or incompatible reserved
+       partition inside this same mount call. A failed first mount followed by
+       an explicit format and remount can leave the wear-level layer attached
+       and make the retry fail until reboot. */
+    if (!SD.begin(true, "/android", 10, "android")) {
         Serial.println("Android virtual SD could not be mounted");
-        if (!blankPartition) {
-            Serial.println("Existing virtual SD retained without formatting");
-        }
         sdcardMounted = false;
         return false;
     }
