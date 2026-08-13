@@ -71,6 +71,16 @@ def validate_record(record: Any, path: Path, line_number: int, session: int, seg
             isinstance(longitude, (int, float)) and not isinstance(longitude, bool) and -180 <= longitude <= 180,
             f"{label}: invalid GPS longitude",
         )
+        source = record.get("source", "onboard")
+        require(source in {"onboard", "android"}, f"{label}: invalid GPS source")
+        accuracy = record.get("accuracyMeters")
+        if accuracy is not None:
+            require(
+                isinstance(accuracy, (int, float))
+                and not isinstance(accuracy, bool)
+                and 0 <= accuracy <= 100000,
+                f"{label}: invalid GPS accuracy",
+            )
     elif record["type"] == "ble":
         address = record.get("address")
         require(isinstance(address, str) and BLE_ADDRESS.fullmatch(address) is not None, f"{label}: invalid BLE address")
@@ -167,8 +177,12 @@ def run_self_test() -> None:
                 "type": "gps",
                 "segment": 0,
                 "uptimeMs": 200,
+                "source": "android",
+                "provider": "gps",
+                "sourceUnixTimeMs": 1784682000000,
                 "latitude": 41.88,
                 "longitude": -87.63,
+                "accuracyMeters": 4.5,
             },
         ]
         first.write_bytes(("\n".join(json.dumps(record) for record in records) + "\n{\"formatVersion\":1").encode())

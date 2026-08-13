@@ -28,6 +28,21 @@ The customized Heltec WiFi LoRa 32 V4 build adds:
 - Passive hardware smoke and soak validation that never supplies an RF
   transmit confirmation.
 
+### Customized WiFi LoRa 32 V4 installation
+
+Download the two WiFi LoRa 32 V4 binaries from this fork's matching GitHub
+release. Use `Bruce-heltec-wifi-lora-32-v4.bin` at flash offset `0x0` for a
+blank device or a complete recovery. Use
+`Bruce-heltec-wifi-lora-32-v4-app.bin` at offset `0x10000` only when the device
+already has this customized partition table. Neither image erases the Android
+spool partition; do not use an erase-flash option when retaining queued data.
+
+The Android companion verifies each archived file's size and CRC32 before the
+firmware releases that spool segment for reuse. If Android is disconnected,
+the device retains queued segments and reports backpressure instead of
+claiming that an unsaved segment was archived. Reconnect Android before the
+reserved spool is exhausted.
+
 ## :zap: Get Our Official DevKit!
 
 # RF REAPER
@@ -122,8 +137,6 @@ an interrupted final write:
 ```sh
 python3 boards/heltec-wifi-lora-32-v4/validate_field_log.py ~/Downloads/session-*.ndjson
 ```
-
-## Safety and legal use
 
 <details>
   <summary><h2>BLE</h2></summary>

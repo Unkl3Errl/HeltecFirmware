@@ -1,5 +1,6 @@
 from pathlib import Path
 import csv
+from shutil import copyfile
 from SCons.Script import Import
 
 # Import PlatformIO's SCons environment
@@ -34,6 +35,7 @@ part_bin = build_dir / "partitions.bin"
 app_bin  = build_dir / "firmware.bin"
 
 out_bin  = proj_dir / f"Bruce-{pioenv}.bin"
+out_app_bin = proj_dir / f"Bruce-{pioenv}-app.bin"
 
 # Esptool from PlatformIO + Python executable
 esptool_pkg = senv.PioPlatform().get_package_dir("tool-esptoolpy")
@@ -64,8 +66,8 @@ def _merge_bins_callback(target, source, env):
         "board_build.partitions", default=""
     )
     part_csv = proj_dir / part_csv_name if part_csv_name else proj_dir / "partitions.csv"
-    ota_size = None
-    ota0_offset = None
+    app_size = None
+    app_offset = None
     if part_csv.exists():
         with open(part_csv, newline="") as f:
             reader = csv.reader(f)
@@ -77,25 +79,25 @@ def _merge_bins_callback(target, source, env):
                     continue
                 name, ptype, subtype, offset, size = cols[:5]
                 subtype = subtype.lower()
-                if subtype == "ota_0" and ota_size is None:
+                if subtype in {"factory", "ota_0"} and app_size is None:
                     try:
-                        ota_size = int(size, 0)
-                        ota0_offset = int(offset, 0)
+                        app_size = int(size, 0)
+                        app_offset = int(offset, 0)
                     except ValueError:
                         pass
 
     # ---- Firmware size check against test partition ----
-    if ota_size:
+    if app_size:
         fw_size = app_bin.stat().st_size
-        percent = (fw_size / ota_size) * 100 if ota_size else 0
+        percent = (fw_size / app_size) * 100 if app_size else 0
         bar_len = 20
-        filled = int(bar_len * fw_size / ota_size)
+        filled = int(bar_len * fw_size / app_size)
         bar = "=" * filled + " " * (bar_len - filled)
         print(
-            f"BRUCE: [{bar}] {percent:.1f}% (used 0x{fw_size:X} bytes of 0x{ota_size:X} of OTA partition)"
+            f"BRUCE: [{bar}] {percent:.1f}% (used 0x{fw_size:X} bytes of 0x{app_size:X} of app partition)"
         )
-        if fw_size > ota_size:
-            print("[merge_bin] Error: firmware.bin exceeds OTA partition size")
+        if fw_size > app_size:
+            print("[merge_bin] Error: firmware.bin exceeds app partition size")
             env.Exit(1)
 
     cmd = " ".join([
@@ -120,12 +122,14 @@ def _merge_bins_callback(target, source, env):
         except FileNotFoundError:
             size = 0
         print(f"[merge_bin] Success -> {out_bin} ({size} bytes)")
-        if ota0_offset:
-            if size < (ota0_offset + ota_size):
+        copyfile(app_bin, out_app_bin)
+        print(f"[app_bin] Success -> {out_app_bin} ({out_app_bin.stat().st_size} bytes)")
+        if app_offset:
+            if size <= (app_offset + app_size):
                 print("[Final bin] Valid bin to upload")
             else:
                 print(
-                    f"[Final bin] Error: bin size 0x{size:X} exceeds ota_0 offset 0x{(ota0_offset+ota_size):X}"
+                    f"[Final bin] Error: bin size 0x{size:X} exceeds app end 0x{(app_offset+app_size):X}"
                 )
                 env.Exit(1)
 

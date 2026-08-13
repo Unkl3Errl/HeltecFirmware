@@ -253,7 +253,11 @@ def run(args: argparse.Namespace) -> None:
     anonymous = build_opener()
     status, _ = request(anonymous, base_url, "GET", "/api/heltec/status", timeout=args.timeout)
     require(status == 401, f"unauthenticated hardware status returned HTTP {status}, expected 401")
-    for path in ("/api/heltec/fieldlog", "/api/heltec/fieldlog/files"):
+    for path in (
+        "/api/heltec/fieldlog/phone-gps",
+        "/api/heltec/fieldlog",
+        "/api/heltec/fieldlog/files",
+    ):
         status, _ = request(anonymous, base_url, "GET", path, timeout=args.timeout)
         require(status == 401, f"unauthenticated {path} returned HTTP {status}, expected 401")
     print("PASS unauthenticated hardware and field-log data are rejected")
@@ -540,6 +544,11 @@ def run(args: argparse.Namespace) -> None:
             "field-log GPS counter is invalid",
         )
         require(
+            isinstance(field_gps.get("phoneFixes"), int)
+            and 0 <= field_gps["phoneFixes"] <= field_gps["fixes"],
+            "field-log phone GPS counter is invalid",
+        )
+        require(
             isinstance(field_ble.get("observations"), int) and field_ble["observations"] >= 0,
             "field-log BLE observation counter is invalid",
         )
@@ -683,6 +692,19 @@ def run(args: argparse.Namespace) -> None:
         error = parse_json(body, "empty field-log control").get("error")
         require(error == "missing action", f"field-log control returned the wrong error: {error!r}")
         print("PASS field-log control requires an explicit action")
+
+        status, body = request(
+            authenticated,
+            base_url,
+            "POST",
+            "/api/heltec/fieldlog/phone-gps",
+            {"latitude": "91", "longitude": "0"},
+            timeout=args.timeout,
+        )
+        require(status == 400, f"invalid phone GPS fix returned HTTP {status}, expected 400")
+        error = parse_json(body, "invalid phone GPS response").get("error")
+        require(error == "invalid coordinates", f"phone GPS route returned the wrong error: {error!r}")
+        print("PASS phone-assisted GPS rejects invalid coordinates without changing logger state")
 
         status, body = request(
             authenticated, base_url, "POST", "/reboot", timeout=args.timeout

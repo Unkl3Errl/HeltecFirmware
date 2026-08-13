@@ -218,6 +218,7 @@ void clearSessionStateLocked() {
     resumeCount = 0;
     recoveredSegments = 0;
     gpsFixes = 0;
+    phoneGpsFixes = 0;
     bleObservations = 0;
     uniqueBleDevices = 0;
     uniqueBleCapacityReached = false;
@@ -424,6 +425,8 @@ void countRecordLocked(JsonDocument &document) {
     const char *type = document["type"] | "";
     if (!strcmp(type, "gps")) {
         gpsFixes++;
+        const char *source = document["source"] | "onboard";
+        if (!strcmp(source, "android")) phoneGpsFixes++;
     } else if (!strcmp(type, "ble")) {
         bleObservations++;
         const char *address = document["address"] | "";
