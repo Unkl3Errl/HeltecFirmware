@@ -1,7 +1,12 @@
 #ifndef __DISPLAY_LOGER
 #define __DISPLAY_LOGER
+#ifdef HAS_SCREEN
+#include <display/tft.h>
+#define BRUCE_TFT_DRIVER tft_display
+#else
 #include <VectorDisplay.h>
 #define BRUCE_TFT_DRIVER SerialDisplayClass
+#endif
 enum tftFuncs : uint8_t { // DO NOT CHANGE THE ORDER, ADD NEW FUNCTIONS TO THE END!!!
     FILLSCREEN,           // 0
     DRAWRECT,             // 1
@@ -59,9 +64,27 @@ private:
     TaskHandle_t asyncSerialTask = NULL;
     QueueHandle_t asyncSerialQueue = NULL;
     static void asyncSerialTaskFunc(void *pv);
-    inline uint8_t currentTextSize() const { return textsize; }
-    inline uint16_t currentTextColor() const { return textcolor; }
-    inline uint16_t currentTextBgColor() const { return textbgcolor; }
+    inline uint8_t currentTextSize() const {
+#if defined(HAS_SCREEN)
+        return getTextSize();
+#else
+        return textsize;
+#endif
+    }
+    inline uint16_t currentTextColor() const {
+#if defined(HAS_SCREEN)
+        return getTextColor();
+#else
+        return textcolor;
+#endif
+    }
+    inline uint16_t currentTextBgColor() const {
+#if defined(HAS_SCREEN)
+        return getTextBgColor();
+#else
+        return textbgcolor;
+#endif
+    }
 
 public:
     tft_logger(int16_t w = TFT_WIDTH, int16_t h = TFT_HEIGHT);

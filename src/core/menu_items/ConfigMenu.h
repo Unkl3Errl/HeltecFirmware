@@ -10,15 +10,17 @@ public:
     void optionsMenu(void);
     void drawIcon(float scale);
     bool hasTheme() { return bruceConfig.theme.config; }
-    String themePath() { return bruceConfig.theme.paths.config; }
+    const String &themePath() override { return bruceConfig.theme.paths.config; }
 
 private:
     // Submenus
     void displayUIMenu(void);
     void ledMenu(void);
+    void audioMenu(void);
     void systemMenu(void);
     void advancedMenu(void);
     void powerMenu(void);
+    void pinsMenu(void);
     void devMenu(void);
 
     // Helper methods for complex operations

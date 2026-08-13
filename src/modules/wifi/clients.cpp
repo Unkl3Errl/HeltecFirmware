@@ -1,5 +1,5 @@
 #ifndef LITE_VERSION
-// SSH client support inherited from upstream Bruce.
+// SSH borrowed from https://github.com/m5stack/M5Cardputer :)
 
 #include "clients.h"
 
@@ -593,6 +593,7 @@ bool tryAppendLiveInputSuffixFromRemoteLine(const String &line, bool renderUpdat
 }
 
 void renderPrompt(bool forceNewLine) {
+    tft.setTextSize(FP);
     if (commandBuffer == "> ") {
         String promptPrefix = getQueuedPromptPrefix();
         if (!promptPrefix.isEmpty()) commandBuffer = promptPrefix;
@@ -789,7 +790,7 @@ void sshWorkerTask(void *pvParameters) {
     ssh_options_set(sshSession, SSH_OPTIONS_GLOBAL_KNOWNHOSTS, SSH_GLOBAL_KNOWN_HOSTS_PATH);
     ssh_options_set(sshSession, SSH_OPTIONS_STRICTHOSTKEYCHECK, &strictHostKeyChecking);
 
-    if (WiFi.status() != WL_CONNECTED) {
+    if (!WiFi.isConnected()) {
         markSessionClosed("WiFi disconnected before SSH connect.", true);
         goto SSH_EXIT;
     }
@@ -834,7 +835,7 @@ void sshWorkerTask(void *pvParameters) {
     markSessionReady();
 
     while (!isStopRequested()) {
-        if (WiFi.status() != WL_CONNECTED) {
+        if (!WiFi.isConnected()) {
             markSessionClosed("WiFi disconnected during SSH session.", true);
             goto SSH_EXIT;
         }
@@ -1018,7 +1019,7 @@ void telnetWorkerTask(void *pvParameters) {
     markSessionReady();
 
     while (!isStopRequested()) {
-        if (WiFi.status() != WL_CONNECTED) {
+        if (!WiFi.isConnected()) {
             markSessionClosed("WiFi disconnected during Telnet session.", true);
             goto TELNET_EXIT;
         }
@@ -1060,6 +1061,21 @@ TELNET_EXIT:
 
 void runSessionUiLoop(const String &title) {
     resetCommandBufferToPrompt();
+    resetClientScreen(title.c_str());
+
+    displayTextLine("Connecting...");
+    while (isSessionConnecting() && !isSessionClosed() && !returnToMenu) {
+        if (check(EscPress)) {
+            finishSessionUi(title);
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    if (returnToMenu || isSessionClosed()) {
+        finishSessionUi(title);
+        return;
+    }
+
     resetClientScreen(title.c_str());
     renderPrompt();
 
@@ -1149,10 +1165,12 @@ void runSessionUiLoop(const String &title) {
 #else
         if (check(SelPress)) {
             String message = keyboard("", 76, title + " Command:");
+
             if (message == "cls" || message == "clear") {
                 appendSessionCommandToLog(message);
                 resetClientScreen(title.c_str());
             } else {
+                tft.setTextSize(FP);
                 appendSessionCommandToLog(message);
                 queueSessionCommand(message + "\r");
                 tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
@@ -1161,6 +1179,7 @@ void runSessionUiLoop(const String &title) {
             }
             resetCommandBufferToPrompt();
             renderPrompt();
+            SelPress = false; // Resets button state to avoid repeated prompts
         }
 #endif
 
@@ -1175,7 +1194,7 @@ void runSessionUiLoop(const String &title) {
 }
 } // namespace
 
-char *stringTochar(String s) {
+char *stringTochar(const String &s) {
     static char arr[128];
     memset(arr, 0, sizeof(arr));
     s.toCharArray(arr, sizeof(arr));

@@ -3,10 +3,6 @@
 This checkout adds the `heltec-wifi-lora-32-v4` PlatformIO environment for the
 standard ESP32-S3R2 V4 board with 16 MB flash and 2 MB QSPI PSRAM.
 
-The project is intentionally Heltec-only: PlatformIO exposes this single build
-target, the board registry contains only its custom definition and variant, and
-the build automation publishes only the Heltec V4 image.
-
 The port is based on `BruceDevices/firmware` `main` commit
 `ac869d3d99ba222fd2fe7f76b707e4929385bd4c`, verified against the fetched
 upstream branch on July 18, 2026.
@@ -27,9 +23,8 @@ upstream branch on July 18, 2026.
   LoRa controls plus a constrained transmitter
 - Bounded GPS fix track with JSON and GPX downloads
 - Bounded recent LoRa receive history with signal metrics and JSON download
-- Reset-resistant LittleFS field logger for incremental onboard/Android GPS
-  fixes and passive BLE observations, with optional automatic resume
-  after a reset
+- Reset-resistant LittleFS field logger for incremental GPS fixes and passive
+  BLE observations, with optional automatic resume after a reset
 - Marauder-style standalone OLED interface with four-row scrolling menus,
   inverted selection highlighting, and nested Dashboard, GPS monitor, LoRa
   receiver, Field logger, and System menus
@@ -42,7 +37,6 @@ upstream branch on July 18, 2026.
 - Confirmed System-menu sleep with PRG wake and confirmed power down requiring
   RST or a power cycle
 - Deep-sleep wake using the PRG/BOOT button on GPIO 0
-- A Heltec-only main menu that excludes unsupported accessory categories
 
 The onboard 128x64 SSD1306 OLED shows boot progress and a standalone menu using
 the same visual hierarchy and button-selection style as this project's Marauder
@@ -59,14 +53,6 @@ its existing per-packet confirmation; the OLED interface never transmits.
 The onboard SX1262 pin mapping, V4 RF front-end controls, and default radio type
 are compiled in. Attach the correct antenna before using the radio and configure
 a legal frequency and transmit power for your region.
-
-The onboard SX1262 is exposed through **LoRa**, not Bruce's generic **RF**
-category. The generic Sub-GHz/CC1101, NRF24, RFID/NFC, infrared, external
-Ethernet, FM, iButton, audio, microphone, QR/TFT rendering, and Megalodon
-stacks are fully removed from source selection, serial commands, JavaScript
-bindings, configuration, bundled assets, and dependencies. SD remains only as
-the shared filesystem abstraction used by LittleFS-aware code; the Heltec
-target has no SD-card menu entry or configured SD pins.
 
 Leaving LoRa chat now puts the SX1262 to sleep, closes its dedicated SPI bus,
 and powers down the RF front end. Deep sleep also disables the RF front end,
@@ -125,10 +111,6 @@ browser:
   is recorded at most once per minute, and a GPS position is attached when a fix
   is no more than 30 seconds old. Logging stops before LittleFS free space falls
   below the 256 KiB reserve.
-- **Android GPS assist** accepts authenticated fixes only while an active field
-  log has GPS enabled. Records identify `source: "android"`, provider, source
-  time, and optional accuracy, altitude, and speed so consumers can distinguish
-  them from onboard GNSS fixes.
 - Saved `session-NNNNNN-SSS.ndjson` segments are listed and downloaded through
   authenticated routes. A segment marked **interrupted tail** contains valid
   newline-delimited records followed by the preserved partial write; consumers
@@ -137,27 +119,17 @@ browser:
   addresses, and broadcast device names. The WebUI does not offer deletion, so
   stored evidence is never removed by an accidental control click.
 
-These controls require the normal WebUI session cookie. Android-assisted
-location uses `POST /api/heltec/fieldlog/phone-gps`. The remaining endpoints are
+These controls require the normal WebUI session cookie. Their endpoints are
 `POST /api/heltec/gps`, `GET|POST /api/heltec/gps/history`,
 `GET|POST /api/heltec/lora`,
 `GET|POST /api/heltec/lora/history`, `POST /api/heltec/lora/transmit`, and
 `GET /api/heltec/status`. Field logging uses `GET|POST /api/heltec/fieldlog`,
 `GET /api/heltec/fieldlog/files`, and
-`GET /api/heltec/fieldlog/download?name=...`. Starting accepts `gps`, `ble`,
-and `autoResume` booleans; stopping requires `action=stop`. The
-authenticated reboot endpoint is `POST /reboot`;
+`GET /api/heltec/fieldlog/download?name=...`. Starting accepts `gps`, `ble`, and
+`autoResume` booleans; stopping requires `action=stop`. The authenticated reboot endpoint is `POST /reboot`;
 it requires `action=restart` and the literal confirmation field `RESTART`. The
 history POST only accepts `action=clear`. The transmit endpoint additionally
 requires the literal confirmation field `TRANSMIT`.
-
-The shared
-[`HeltecController`](https://github.com/Unkl3Errl/HeltecController) Android
-companion also uses the original authenticated WebUI
-contracts: `GET /getscreen` for the vector display, `POST /cm` for navigation,
-and `/listfiles`, `/file`, `/edit`, and `/rename` for its native LittleFS file
-manager. USB operation uses the original 115200-baud Bruce CDC command handler;
-the app applies local confirmation policy without changing the firmware CLI.
 
 For repeatable two-board testing, the original receiver keeps the `BruceNet`
 SSID and the second board uses `BrucePeer`; both retain the `brucenet` password.
@@ -233,8 +205,6 @@ Validated on the target board:
 - All Heltec WebUI status/control requests returned HTTP 200 after login
 - A clean Heltec target rebuild succeeded from the local PlatformIO cache with
   the internet service disabled and external DNS unavailable
-- A fully cacheless build succeeded after removing the shared PlatformIO object
-  cache, proving the reduced Heltec-only board tree builds from source
 - OLED, PRG status-page cycling, Wi-Fi AP, WebUI, 16 MB flash, and 2 MB PSRAM
 - OLED long-press controls for GPS monitor start/stop and LoRa RX start/stop
 - Hardware-page deep-sleep entry after button release and PRG wake
@@ -253,19 +223,8 @@ checkout has a Python 3.13 virtual environment:
 PATH="$PWD/.venv313/bin:$PATH" pio run -e heltec-wifi-lora-32-v4
 ```
 
-The merged factory image is written to `Bruce-heltec-wifi-lora-32-v4.bin` and
-is flashed at offset `0x0`. The same build also writes
-`Bruce-heltec-wifi-lora-32-v4-app.bin`; flashing that application-only image at
-offset `0x10000` preserves NVS and LittleFS during upgrades when the partition
-layout is unchanged. The merged image ends before LittleFS in this layout but
-fills the NVS gap with erased bytes, so an offset-`0x0` factory flash resets
-saved settings. A full-chip erase removes both NVS and LittleFS.
-
-The build hook derives `BRUCE_VERSION` and `GIT_COMMIT_HASH` from an exact
-firmware release tag and the current Git commit. Untagged builds remain visibly
-marked `dev`, dirty local builds append `-dirty`, and `vX.Y.Z` tag builds report
-`X.Y.Z`. `validate_firmware_metadata.py` confirms that both resolved strings
-are present in the merged image and rejects the former `Homebrew` placeholder.
+The merged image is written to `Bruce-heltec-wifi-lora-32-v4.bin` and is
+flashed at offset `0x0`.
 
 ## Upload
 

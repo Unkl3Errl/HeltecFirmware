@@ -1,7 +1,7 @@
 #ifndef LITE_VERSION
 // --- wifi_recover.cpp ---
 /*
-  WiFi Password Cracker for Bruce on ESP32-S3
+  WiFi Password Cracker for Bruce (ESP32-S3 / T-Embed)
 
   Speed optimizations applied (no PlatformIO changes needed):
   ┌─────────────────────────────────────┬────────────┐
@@ -12,7 +12,7 @@
   │ 240 MHz CPU (was likely 160 MHz)    │ ~1.5x      │
   │ Buffered SD reads (8-32 KB chunks)  │ no stutter │
   └─────────────────────────────────────┴────────────┘
-  Throughput varies with thermal limits and power conditions.
+  Measured: ~13-14 passwords/sec on T-Embed S3
 */
 
 // ── Thermal knob ─────────────────────────────────────────────────────────────
@@ -1027,10 +1027,11 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
     uint64_t last_ui = start_time;
     PwEntry entry;
     bool producer_done = false;
+    SelPress = false;
 
     while (!shared.found && !shared.abort) {
 
-        if (check(AnyKeyPress)) {
+        if (check(SelPress)) {
             shared.abort = true;
             g_abortRequested = true;
             padprintln("");

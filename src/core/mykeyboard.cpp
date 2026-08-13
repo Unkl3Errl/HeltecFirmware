@@ -1,6 +1,9 @@
 #include "mykeyboard.h"
 #include "core/utils.h"
 #include "core/wifi/webInterface.h"
+#include "modules/ir/TV-B-Gone.h"
+#include "modules/ir/custom_ir.h"
+#include "modules/rf/rf_send.h"
 #include "powerSave.h"
 #include "sd_functions.h"
 #include <ArduinoJson.h>
@@ -238,12 +241,18 @@ struct box_t {
 // Retrieves the current keyStroke from InputHandler, resets it after use.
 // This function is used in loopTask to get the latest key press.
 keyStroke _getKeyPress() {
+#ifndef USE_TFT_eSPI_TOUCH
     vTaskSuspend(xHandle);
     keyStroke key = KeyStroke;
     KeyStroke.Clear();
     delay(10);
     vTaskResume(xHandle);
     return key;
+#else
+    keyStroke key = KeyStroke;
+    KeyStroke.Clear();
+    return key;
+#endif
 } // Returns a keyStroke that the keyboards won't recognize by default
 
 /*********************************************************************
@@ -251,13 +260,14 @@ keyStroke _getKeyPress() {
 ** location: mykeyboard.cpp
 ** runs a function called by the shortcut action
 **********************************************************************/
-void checkShortcutPress() {
+bool checkShortcutPress() {
     static JsonDocument shortcutsJson; // parsed only once
+    bool executed = false;
 
     // lazy init
     if (shortcutsJson.size() == 0) {
         FS *fs;
-        if (!getFsStorage(fs)) return;
+        if (!getFsStorage(fs)) return false;
         File file = fs->open("/shortcuts.json", FILE_READ);
         if (!file) {
             log_e("Shortcuts Config file not found. Using default values");
@@ -268,13 +278,13 @@ void checkShortcutPress() {
             shortcuts["b"] = "loader open badusb";
             shortcuts["w"] = "loader open webui";
             shortcuts["f"] = "loader open files";
-            return;
+            return false;
         }
         // else
         if (deserializeJson(shortcutsJson, file)) {
             log_e("Failed to parse shortcuts.json");
             file.close();
-            return;
+            return false;
         }
         file.close();
     }
@@ -291,9 +301,11 @@ void checkShortcutPress() {
             if (i == *shortcut_key) { // compare the 1st char of the key string
                 // execute the associated action
                 serialCli.parse(String(shortcut_value));
+                executed = true;
             }
         }
     }
+    return executed;
 }
 
 /*********************************************************************
@@ -817,7 +829,10 @@ String generalKeyboard(
         if (millis() - last_input_time > 250) { // INPUT DEBOUCING
             // waits at least 250ms before accepting another input, to prevent rapid involuntary repeats
 
-#if defined(HAS_TOUCH)
+#if defined(HAS_TOUCH) // CYD, Core2, CoreS3
+#if defined(USE_TFT_eSPI_TOUCH)
+            check(AnyKeyPress);
+#endif
             if (touchPoint.pressed) {
                 // If using touchscreen and buttons_strings, reset the navigation states to avoid inconsistent
                 // behavior, and reset the navigation coords to the OK button.
@@ -1123,7 +1138,7 @@ String generalKeyboard(
                     redraw = true;
                 }
             }
-#elif defined(HAS_KEYBOARD)
+#elif defined(HAS_KEYBOARD)  // Cardputer, T-Deck and T-LoRa-Pager
             if (KeyStroke.pressed) {
                 wakeUpScreen();
                 tft.setCursor(cursor_x, cursor_y);
@@ -1172,8 +1187,9 @@ String generalKeyboard(
 #endif
 #endif
 
-#if defined(HAS_ENCODER)
-            // If a touchscreen and encoder coexist, prioritize the touchscreen.
+#if defined(HAS_ENCODER) // T-Embed and T-LoRa-Pager and WaveSentry
+                         // WaveSentry has Touchscreen and Encoder, but the touchscreen is prioritized
+                         // if touchscreen is pressed, ignore the encoder input
 #if !defined(HAS_TOUCH)
             LongPress = true;
 #endif
@@ -1181,77 +1197,82 @@ String generalKeyboard(
                 LongPress = false;
                 selection_made = true;
             } else {
-                /* NEXT "Btn" to move forward on th X axis (to the right) */
-                // if ESC is pressed while NEXT or PREV is received, then we navigate on the Y axis instead
-                if (check(NextPress) && touchPoint.pressed == false) {
-                    if (EscPress) {
-                        y++;
-                    } else if ((x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)) {
-                        // if we are at the end of the current line
-                        y++;   // next line
-                        x = 0; // reset to first key
-                    } else x++;
+                int32_t rotarySteps = drainRotarySteps();
+                if (rotarySteps != 0 && touchPoint.pressed == false) {
+                    check(NextPress);
+                    check(PrevPress);
+                    while (rotarySteps < 0) {
+                        if (EscPress) {
+                            y++;
+                        } else if (
+                            (x >= buttons_number - 1 && y <= -1) || (x >= KeyboardWidth - 1 && y >= 0)
+                        ) {
+                            y++;
+                            x = 0;
+                        } else x++;
 
-                    if (y >= KeyboardHeight)
-                        y = -1; // if we are at the end of the keyboard, then return to the top
+                        if (y >= KeyboardHeight) y = -1;
+                        if (y == -1 && x >= buttons_number) x = 0;
 
-                    // If we move to a new line using the ESC-press navigation and the previous x coordinate
-                    // is greater than the number of available buttons_strings on the new line, reset x to
-                    // avoid out-of-bounds behavior, this can only happen when switching to the first line, as
-                    // the others have all the same number of keys
-                    if (y == -1 && x >= buttons_number) x = 0;
-
-                    // Skip over keys with '\0' value
-                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
-                        while (keys[y][x][caps] == '\0') {
-                            x++;
-                            if (x >= KeyboardWidth) {
-                                x = 0;
-                                y++;
-                                if (y >= KeyboardHeight) {
-                                    y = -1;
-                                    break;
+                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                            while (keys[y][x][caps] == '\0') {
+                                x++;
+                                if (x >= KeyboardWidth) {
+                                    x = 0;
+                                    y++;
+                                    if (y >= KeyboardHeight) {
+                                        y = -1;
+                                        break;
+                                    }
                                 }
                             }
                         }
+
+                        rotarySteps++;
+                        yield();
+                        PrevPress = false;
+                        NextPress = false;
+                        UpPress = false;
+                        DownPress = false;
+                        redraw = true;
                     }
+                    while (rotarySteps > 0) {
+                        if (EscPress) {
+                            y--;
+                        } else if (x <= 0) {
+                            y--;
+                            if (y == -1) x = buttons_number - 1;
+                            else x = KeyboardWidth - 1;
+                        } else x--;
 
-                    redraw = true;
-                }
-                /* PREV "Btn" to move backwards on th X axis (to the left) */
-                if (check(PrevPress) && touchPoint.pressed == false) {
-                    if (EscPress) {
-                        y--;
-                    } else if (x <= 0) {
-                        y--;
-                        if (y == -1) x = buttons_number - 1;
-                        else x = KeyboardWidth - 1;
-                    } else x--;
+                        if (y < -1) {
+                            y = KeyboardHeight - 1;
+                            x = KeyboardWidth - 1;
+                        }
 
-                    if (y < -1) { // go back to the bottom right of the keyboard
-                        y = KeyboardHeight - 1;
-                        x = KeyboardWidth - 1;
-                    }
-                    // else if (y == -1 && x >= buttons_number) x = buttons_number - 1;
-                    // else if (x < 0) x = KeyboardWidth - 1;
-
-                    // Skip over keys with '\0' value when moving backwards
-                    if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
-                        while (keys[y][x][caps] == '\0') {
-                            x--;
-                            if (x < 0) {
-                                x = KeyboardWidth - 1;
-                                y--;
-                                if (y < 0) {
-                                    y = -1;
-                                    x = buttons_number - 1;
-                                    break;
+                        if (y >= 0 && y < KeyboardHeight && x >= 0 && x < KeyboardWidth) {
+                            while (keys[y][x][caps] == '\0') {
+                                x--;
+                                if (x < 0) {
+                                    x = KeyboardWidth - 1;
+                                    y--;
+                                    if (y < 0) {
+                                        y = -1;
+                                        x = buttons_number - 1;
+                                        break;
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    redraw = true;
+                        rotarySteps--;
+                        vTaskDelay(4 / portTICK_PERIOD_MS);
+                        PrevPress = false;
+                        NextPress = false;
+                        UpPress = false;
+                        DownPress = false;
+                        redraw = true;
+                    }
                 }
             }
 #endif
@@ -1278,6 +1299,9 @@ String generalKeyboard(
 
             last_input_time = millis();
         }
+#ifdef HAS_ENCODER
+        vTaskDelay(4 / portTICK_PERIOD_MS);
+#endif
     }
 
     // Resets screen when finished writing
@@ -1317,7 +1341,7 @@ void setKeyboardLanguage() {
 /// This calls the keyboard. The keyset is chosen based on bruceConfig.keyboardLang.
 /// Supported values: "QWERTY" (default), "AZERTY" (French), "QWERTZ" (German).
 /// Returns the user typed string, or the ASCII ESC character if cancelled.
-String keyboard(String current_text, int max_size, String textbox_title, bool mask_input) {
+String keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     String lang = bruceConfig.keyboardLang;
     if (lang == "AZERTY") {
         return generalKeyboard<azerty_keyboard_height, azerty_keyboard_width>(
@@ -1337,7 +1361,7 @@ String keyboard(String current_text, int max_size, String textbox_title, bool ma
 
 /// This calls a keyboard with the characters useful to write hexadecimal codes.
 /// Returns the user typed strings, return the ASCII ESC character if the operation was cancelled
-String hex_keyboard(String current_text, int max_size, String textbox_title, bool mask_input) {
+String hex_keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     return generalKeyboard<hex_keyboard_height, hex_keyboard_width>(
         current_text, max_size, textbox_title, hex_keyset, mask_input
     );
@@ -1345,7 +1369,7 @@ String hex_keyboard(String current_text, int max_size, String textbox_title, boo
 
 /// This calls a numbers only keyboard. Returns the user typed strings, return the ASCII ESC character
 /// if the operation was cancelled
-String num_keyboard(String current_text, int max_size, String textbox_title, bool mask_input) {
+String num_keyboard(const String &current_text, int max_size, const String &textbox_title, bool mask_input) {
     return generalKeyboard<numpad_keyboard_height, numpad_keyboard_width>(
         current_text, max_size, textbox_title, numpad_keyset, mask_input
     );

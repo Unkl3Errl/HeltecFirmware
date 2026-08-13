@@ -28,6 +28,9 @@ void ConfigMenu::optionsMenu() {
 #ifdef HAS_RGB_LED
             {"LED Config",    [this]() { ledMenu(); }      },
 #endif
+#if !defined(LITE_VERSION) && (defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR))
+            {"Audio Config",  [this]() { audioMenu(); }    },
+#endif
             {"System Config", [this]() { systemMenu(); }   },
             {"Power",         [this]() { powerMenu(); }    },
         };
@@ -117,6 +120,38 @@ void ConfigMenu::ledMenu() {
 }
 #endif
 /*********************************************************************
+**  Function: audioMenu
+**  Audio configuration submenu with auto-rebuild for toggles
+**********************************************************************/
+void ConfigMenu::audioMenu() {
+    while (true) {
+        std::vector<Option> localOptions = {
+#if !defined(LITE_VERSION)
+#if defined(BUZZ_PIN) || defined(HAS_NS4168_SPKR)
+
+            {String("Sound: ") + (bruceConfig.soundEnabled ? "ON" : "OFF"),
+                                                             [this]() {
+                 // Toggle sound setting
+                 bruceConfig.soundEnabled = !bruceConfig.soundEnabled;
+                 bruceConfig.saveFile();
+             }                                                                                                                                            },
+#if defined(HAS_NS4168_SPKR)
+            {"Sound Volume",                                                [this]() { setSoundVolume(); }},
+#endif  // BUZZ_PIN || HAS_NS4168_SPKR
+#endif  //  HAS_NS4168_SPKR
+#endif  //  LITE_VERSION
+            {"Back",                                                        []() {}                       },
+        };
+
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Audio Config");
+
+        // Exit only if user pressed Back or ESC
+        if (selected == -1 || selected == localOptions.size() - 1) { return; }
+        // Menu rebuilds to update toggle label
+    }
+}
+
+/*********************************************************************
 **  Function: systemMenu
 **  System configuration submenu with auto-rebuild for toggles
 **********************************************************************/
@@ -158,13 +193,19 @@ void ConfigMenu::systemMenu() {
 void ConfigMenu::advancedMenu() {
     while (true) {
         std::vector<Option> localOptions = {
+            {"Set Device pins", [this]() { pinsMenu(); }           },
 #if !defined(LITE_VERSION)
-            {"Toggle BLE API", [this]() { enableBLEAPI(); }       },
-            {"BadUSB/BLE",     [this]() { setBadUSBBLEMenu(); }   },
+            {"Toggle BLE API",  [this]() { enableBLEAPI(); }       },
+            {"BadUSB/BLE",      [this]() { setBadUSBBLEMenu(); }   },
 #endif
-            {"Network Creds",  [this]() { setNetworkCredsMenu(); }},
+            {"BLE name",
+             [this]() {
+                 String name = keyboard(bruceConfigPins.bleName, 30, "BLE device name");
+                 if (name.length() > 0 && name != "\x1B") bruceConfigPins.setBleName(name);
+             }                                                     },
+            {"Network Creds",   [this]() { setNetworkCredsMenu(); }},
             {"Factory Reset",
-                                      []() {
+             []() {
                  // Confirmation dialog for destructive action
                  drawMainBorder(true);
                  int8_t choice = displayMessage(
@@ -181,8 +222,8 @@ void ConfigMenu::advancedMenu() {
                      bruceConfig.factoryReset(); // Restarts ESP
                  }
                  // If cancelled, loop continues and menu rebuilds
-             }                                                                             },
-            {"Back",           []() {}                            },
+             }                                                     },
+            {"Back",            []() {}                            },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Advanced");
@@ -228,17 +269,10 @@ void ConfigMenu::powerMenu() {
 void ConfigMenu::devMenu() {
     while (true) {
         std::vector<Option> localOptions = {
-            {"I2C Finder",      [this]() { find_i2c_addresses(); }                      },
-#if !defined(LITE_VERSION)
-            {"LoRa Pins",       [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
-#endif
-            {"I2C Pins",        [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
-            {"UART Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
-            {"GPS Pins",        [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
-            {"Serial USB",      [this]() { switchToUSBSerial(); }                       },
-            {"Serial UART",     [this]() { switchToUARTSerial(); }                      },
-            {"Disable DevMode", [this]() { bruceConfig.setDevMode(false); }             },
-            {"Back",            []() {}                                                 },
+            {"Serial use USB",  [this]() { switchToUSBSerial(); }          },
+            {"Serial use UART", [this]() { switchToUARTSerial(); }         },
+            {"Disable DevMode", [this]() { bruceConfig.setDevMode(false); }},
+            {"Back",            []() {}                                    },
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Dev Mode");
@@ -248,6 +282,38 @@ void ConfigMenu::devMenu() {
             returnToMenu = true; // Signal to exit all Config menus
             return;
         }
+
+        // Exit to Config menu on Back or ESC
+        if (selected == -1 || selected == localOptions.size() - 1) { return; }
+        // Menu rebuilds after each action
+    }
+}
+
+/*********************************************************************
+**  Function: pinsMenu
+**  Developer mode menu for advanced hardware configuration
+**********************************************************************/
+void ConfigMenu::pinsMenu() {
+    while (true) {
+        std::vector<Option> localOptions = {
+            {"I2C Finder",     [this]() { find_i2c_addresses(); }                      },
+            {"CC1101 Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.CC1101_bus); }},
+            {"NRF24  Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.NRF24_bus); } },
+#if !defined(LITE_VERSION)
+            {"LoRa Pins",      [this]() { setSPIPinsMenu(bruceConfigPins.LoRa_bus); }  },
+            {"ST25R3916 Pins", [this]() { setSPIPinsMenu(bruceConfigPins.ST25R_bus); } },
+            {"W5500 Pins",     [this]() { setSPIPinsMenu(bruceConfigPins.W5500_bus); } },
+#endif
+            {"SDCard Pins",    [this]() { setSPIPinsMenu(bruceConfigPins.SDCARD_bus); }},
+            {"I2C Pins",       [this]() { setI2CPinsMenu(bruceConfigPins.i2c_bus); }   },
+            {"UART Pins",      [this]() { setUARTPinsMenu(bruceConfigPins.uart_bus); } },
+            {"GPS Pins",       [this]() { setUARTPinsMenu(bruceConfigPins.gps_bus); }  },
+            //{"Serial use USB",  [this]() { switchToUSBSerial(); }                       },
+            //{"Serial use UART", [this]() { switchToUARTSerial(); }                      },
+            {"Back",           []() {}                                                 },
+        };
+
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Pins Setup");
 
         // Exit to Config menu on Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
@@ -273,6 +339,14 @@ void ConfigMenu::switchToUARTSerial() {
     if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
         sdcardSPI.end();
+    }
+
+    // Check and resolve CC1101/NRF24 pin conflicts
+    if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
+        bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.uart_bus.tx) ||
+        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.rx) ||
+        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.uart_bus.tx)) {
+        AUX_SPI.end();
     }
 
     // Configure UART pins and switch serial output

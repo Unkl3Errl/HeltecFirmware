@@ -5,16 +5,29 @@
 #include "modules/badusb_ble/ducky_typer.h"
 #include "modules/bjs_interpreter/interpreter.h"
 #include "modules/others/clicker.h"
+#include "modules/others/ibutton.h"
+#include "modules/others/mic.h"
+#include "modules/others/qrcode_menu.h"
+#include "modules/others/tururururu.h"
 #include "modules/others/u2f.h"
 // Removed: #include "modules/others/timer.h"
 
 void OthersMenu::optionsMenu() {
     options = {
+        {"QRCodes",      qrcode_menu                  },
+        {"Megalodon",    shark_setup                  },
+
+#if defined(MIC_SPM1423) || defined(MIC_INMP441)
+        {"Microphone",   [this]() { micMenu(); }      }, //@deveclipse
+#endif
+
 // New consolidated BadUSB & HID submenu
 #if !defined(LITE_VERSION)
-#if defined(USB_as_HID)
         {"BadUSB & HID", [this]() { badUsbHidMenu(); }},
 #endif
+
+#ifndef LITE_VERSION
+        {"iButton",      setup_ibutton                },
 #endif
 
         // Timer removed - moved to another "Clock"
@@ -40,6 +53,18 @@ void OthersMenu::badUsbHidMenu() {
     };
 
     loopOptions(options, MENU_TYPE_SUBMENU, "BadUSB & HID");
+}
+
+void OthersMenu::micMenu() {
+    options = {
+#if defined(MIC_SPM1423) || defined(MIC_INMP441)
+        {"Spectrum", mic_test                   },
+        {"Record",   mic_record_app             },
+#endif
+        {"Back",     [this]() { optionsMenu(); }},
+    };
+
+    loopOptions(options, MENU_TYPE_SUBMENU, "Microphone");
 }
 
 void OthersMenu::drawIcon(float scale) {

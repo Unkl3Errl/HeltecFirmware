@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that resolved Heltec build identity is embedded in a firmware image."""
+"""Verify that resolved build identity is embedded in a firmware image."""
 
 from __future__ import annotations
 

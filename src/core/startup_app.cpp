@@ -16,6 +16,9 @@
 #include "modules/gps/gps_tracker.h"
 #include "modules/gps/wardriving.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
+#include "modules/rf/rf_send.h"
+#include "modules/rfid/PN532KillerTools.h"
+#include "modules/rfid/pn532ble.h"
 #include "modules/wifi/sniffer.h"
 #if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
 #include "core/massStorage.h"
@@ -26,12 +29,18 @@ StartupApp::StartupApp() {
     _startupApps["Brucegotchi"] = []() { brucegotchi_start(); };
     _startupApps["Sniffer"] = []() { sniffer_setup(); };
     _startupApps["GPS Tracker"] = []() { GPSTracker(); };
+    _startupApps["PN532 BLE"] = []() { Pn532ble(); };
+    _startupApps["PN532 UART"] = []() { PN532KillerTools(); };
 #endif
     _startupApps["Clock"] = []() { runClockLoop(); };
+    _startupApps["Custom SubGHz"] = []() { sendCustomRF(); };
 #if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
-    _startupApps["Wardriving"] = []() { Wardriving(); };
+    _startupApps["Wardriving"] = []() { Wardriving(true, true); };
+    _startupApps["WardrivingNoRadio"] = []() { Wardriving(); };
+    _startupApps["WardrivingBTEOnly"] = []() { Wardriving(false, true); };
+    _startupApps["WardrivingWifiOnly"] = []() { Wardriving(true, false); };
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     // The Heltec port is operated through its dedicated BruceNet AP. Avoid a
     // station scan immediately before AP startup; on the ESP32-S3 that radio

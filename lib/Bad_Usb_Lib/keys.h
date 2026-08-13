@@ -32,8 +32,8 @@ extern const uint8_t KeyboardLayout_si_SI[];
 #define KEY_RIGHT_ARROW 0xD7
 #define KEY_MENU 0xED //  "Keyboard Application" in USB standard
 #define KEY_SPACE 0x20
-#define KEYBACKSPACE 0xB2 // distinct names avoid collisions with hardware keyboard headers
-#define KEYTAB 0xB3
+#define KEYBACKSPACE 0xB2 // changed from KEY_BACKSPACE due to compatibility with Cardputer keyboard
+#define KEYTAB 0xB3       // changed from KEY_TAB due to compatibility with Cardputer keyboard
 #define KEY_RETURN 0xB0
 #define KEY_ESC 0xB1
 #define KEY_INSERT 0xD1

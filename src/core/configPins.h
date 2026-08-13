@@ -5,6 +5,25 @@
 #include <ArduinoJson.h>
 #include <precompiler_flags.h>
 #include <set>
+#ifndef CC1101_GDO2_PIN
+#define CC1101_GDO2_PIN -1
+#endif
+
+enum RFIDModules {
+    M5_RFID2_MODULE = 0,
+    PN532_I2C_MODULE = 1,
+    PN532_SPI_MODULE = 2,
+    RC522_SPI_MODULE = 3,
+    ST25R3916_SPI_MODULE = 4,
+    PN532_I2C_SPI_MODULE = 5,
+    ST25R3916_I2C_MODULE = 6,
+};
+
+enum RFModules {
+    M5_RF_MODULE = 0,
+    CC1101_SPI_MODULE = 1,
+};
+
 class BruceConfigPins {
 public:
     struct UARTPins {
@@ -24,6 +43,12 @@ public:
             obj["rx"] = rx;
             obj["tx"] = tx;
         }
+
+        bool checkConflict(int8_t p) {
+            gpio_num_t pin = (gpio_num_t)p;
+            if (rx == pin || tx == pin) return true;
+            return false;
+        }
     };
 
     struct I2CPins {
@@ -42,6 +67,12 @@ public:
         void toJson(JsonObject obj) const {
             obj["sda"] = sda;
             obj["scl"] = scl;
+        }
+
+        bool checkConflict(int8_t p) {
+            gpio_num_t pin = (gpio_num_t)p;
+            if (sda == pin || scl == pin) return true;
+            return false;
         }
     };
 
@@ -81,7 +112,7 @@ public:
             obj["io2"] = io2;
         }
 
-        bool checkConflict(uint8_t p) {
+        bool checkConflict(int8_t p) {
             gpio_num_t pin = (gpio_num_t)p;
             if (sck == pin || miso == pin || mosi == pin || cs == pin) return true;
             return false;
@@ -92,6 +123,56 @@ public:
 
     // SPI Buses
 
+#ifdef CC1101_SCK_PIN
+    SPIPins CC1101_bus = {
+        (gpio_num_t)CC1101_SCK_PIN,
+        (gpio_num_t)CC1101_MISO_PIN,
+        (gpio_num_t)CC1101_MOSI_PIN,
+        (gpio_num_t)CC1101_SS_PIN,
+        (gpio_num_t)CC1101_GDO0_PIN,
+        (gpio_num_t)CC1101_GDO2_PIN
+    };
+#else
+    SPIPins CC1101_bus;
+#endif
+
+#ifdef NRF24_SCK_PIN
+    SPIPins NRF24_bus = {
+        (gpio_num_t)NRF24_SCK_PIN,
+        (gpio_num_t)NRF24_MISO_PIN,
+        (gpio_num_t)NRF24_MOSI_PIN,
+        (gpio_num_t)NRF24_SS_PIN,
+        (gpio_num_t)NRF24_CE_PIN
+    };
+#else
+    SPIPins NRF24_bus;
+#endif
+
+#ifdef PN532_SCK_PIN
+    SPIPins PN532_bus = {
+        (gpio_num_t)PN532_SCK_PIN,
+        (gpio_num_t)PN532_MISO_PIN,
+        (gpio_num_t)PN532_MOSI_PIN,
+        (gpio_num_t)PN532_SS_PIN,
+        (gpio_num_t)PN532_CE_PIN
+    };
+#else
+    SPIPins PN532_bus;
+#endif
+
+#ifdef ST25R_SCLK
+    SPIPins ST25R_bus = {
+        (gpio_num_t)ST25R_SCLK,
+        (gpio_num_t)ST25R_MISO,
+        (gpio_num_t)ST25R_MOSI,
+        (gpio_num_t)ST25R_CS,
+        (gpio_num_t)ST25R_IRQ,
+        GPIO_NUM_NC
+    };
+#else
+    SPIPins ST25R_bus;
+#endif
+
 #ifdef SDCARD_SCK
     SPIPins SDCARD_bus = {
         (gpio_num_t)SDCARD_SCK, (gpio_num_t)SDCARD_MISO, (gpio_num_t)SDCARD_MOSI, (gpio_num_t)SDCARD_CS
@@ -101,6 +182,19 @@ public:
 #endif
 
 #if !defined(LITE_VERSION)
+#if defined(W5500_SCK_PIN)
+    SPIPins W5500_bus = {
+        (gpio_num_t)W5500_SCK_PIN,
+        (gpio_num_t)W5500_MISO_PIN,
+        (gpio_num_t)W5500_MOSI_PIN,
+        (gpio_num_t)W5500_SS_PIN,
+        (gpio_num_t)W5500_INT_PIN,
+        (gpio_num_t)W5500_RST_PIN,
+    };
+#else
+    SPIPins W5500_bus;
+#endif
+
 #ifdef LORA_SCK
     SPIPins LoRa_bus = {
         (gpio_num_t)LORA_SCK,
@@ -114,7 +208,7 @@ public:
     SPIPins LoRa_bus;
 #endif
 #endif
-    // I2CPins sys_i2c = {(gpio_num_t)GROVE_SDA, (gpio_num_t)GROVE_SCL};
+    I2CPins sys_i2c = {(gpio_num_t)SYS_I2C_SDA, (gpio_num_t)SYS_I2C_SCL};
     I2CPins i2c_bus = {(gpio_num_t)GROVE_SDA, (gpio_num_t)GROVE_SCL};
     UARTPins uart_bus = {(gpio_num_t)SERIAL_RX, (gpio_num_t)SERIAL_TX};
     UARTPins gps_bus = {(gpio_num_t)GPS_SERIAL_RX, (gpio_num_t)GPS_SERIAL_TX};
@@ -124,6 +218,25 @@ public:
 
     // BLE
     String bleName = String("Keyboard_" + String((uint8_t)(ESP.getEfuseMac() >> 32), HEX));
+
+    // IR
+    int irTx = TXLED;
+    uint8_t irTxRepeats = 0;
+    int irRx = RXLED;
+
+    // RF
+    int rfTx = GROVE_SDA;
+    int rfRx = GROVE_SCL;
+    int rfModule = M5_RF_MODULE;
+    float rfFreq = 433.92;
+    int rfFxdFreq = 1;
+    int rfScanRange = 3;
+
+    // iButton Pin
+    int iButton = 0;
+
+    // RFID
+    int rfidModule = M5_RFID2_MODULE;
 
     // GPS
     int gpsBaudrate = 9600;
@@ -145,9 +258,14 @@ public:
     void fromJson(JsonObject obj);
     void toJson(JsonObject obj) const;
 
+    void setCC1101Pins(SPIPins value);
+    void setNrf24Pins(SPIPins value);
+    void setPn532Pins(SPIPins value);
     void setSDCardPins(SPIPins value);
 #if !defined(LITE_VERSION)
+    void setSR25RPins(SPIPins value);
     void setLoRaPins(SPIPins value);
+    void setW5500Pins(SPIPins value);
 #endif
     void setSpiPins(SPIPins value);
     void setI2CPins(I2CPins value);
@@ -161,6 +279,28 @@ public:
     void validateRotationValue();
     // BLE
     void setBleName(const String name);
+
+    // IR
+    void setIrTxPin(int value);
+    void setIrTxRepeats(uint8_t value);
+    void setIrRxPin(int value);
+
+    // RF
+    void setRfTxPin(int value);
+    void setRfRxPin(int value);
+    void setRfModule(RFModules value);
+    void validateRfModuleValue();
+    void setRfFreq(float value, int fxdFreq = 1);
+    void setRfFxdFreq(float value);
+    void setRfScanRange(int value, int fxdFreq = 0);
+    void validateRfScanRangeValue();
+
+    // iButton
+    void setiButtonPin(int value);
+
+    // RFID
+    void setRfidModule(RFIDModules value);
+    void validateRfidModuleValue();
 
     // GPS
     void setGpsBaudrate(int value);

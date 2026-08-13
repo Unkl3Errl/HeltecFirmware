@@ -180,13 +180,13 @@ typedef struct {
     uint8_t priorityThreshold;
     uint8_t cloneThreshold;
     bool enableBeaconing;
-    uint32_t highTierDuration;
-    uint32_t mediumTierDuration;
-    uint32_t fastTierDuration;
+    uint16_t highTierDuration;
+    uint16_t mediumTierDuration;
+    uint16_t fastTierDuration;
     uint32_t cloneDuration;
     uint8_t maxCloneNetworks;
-    uint32_t baseDuration;
-    uint32_t extendedDuration;
+    uint16_t baseDuration;
+    uint16_t extendedDuration;
 } AttackConfig;
 
 // Handshake capture structure
@@ -307,9 +307,11 @@ void sendBeaconFrames();
 void checkForAssociations();
 void saveNetworkHistory(FS &fs);
 void sendBeaconFrameHelper(const String &ssid, uint8_t channel);
-void saveCredentialsToFile(String ssid, String password);
+void saveCredentialsToFile(const String &ssid, const String &password);
 void saveProbesToPCAP(FS &fs);
-void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &templateName);
+void launchBackgroundPortal(
+    const String &ssid, uint8_t channel, const String &templateName, const String &templateFile = ""
+);
 void checkPortals();
 String generatePortalId(const String &templateName);
 void savePortalCredentials(

@@ -9,6 +9,7 @@
 #include "timer.h"
 #include "core/display.h"
 #include "core/utils.h"
+#include "modules/others/audio.h"
 
 // Constants for better maintainability
 #define DELAY_VALUE 150
@@ -23,7 +24,8 @@ enum SettingMode {
     SETTING_HOURS = 0,
     SETTING_MINUTES = 1,
     SETTING_SECONDS = 2,
-    SETTING_COMPLETE = 3
+    SETTING_SOUND = 3,
+    SETTING_COMPLETE = 4
 };
 
 Timer::Timer() { setup(); }
@@ -37,6 +39,7 @@ void Timer::setup() {
     int hours = 0;
     int minutes = 0;
     int seconds = 0;
+    playSoundOnFinish = true; // Default: sound enabled
     SettingMode settingMode = SETTING_HOURS;
 
     char timeString[12];
@@ -58,12 +61,18 @@ void Timer::setup() {
         switch (settingMode) {
             case SETTING_HOURS:
                 underlineHours();
+                drawSoundOption(false); // Show but don't highlight
                 break;
             case SETTING_MINUTES:
                 underlineMinutes();
+                drawSoundOption(false);
                 break;
             case SETTING_SECONDS:
                 underlineSeconds();
+                drawSoundOption(false);
+                break;
+            case SETTING_SOUND:
+                drawSoundOption(true); // Highlight sound option
                 break;
             default: break;
         }
@@ -77,6 +86,9 @@ void Timer::setup() {
                 case SETTING_HOURS: hours = (hours >= MAX_HOURS) ? 0 : hours + 1; break;
                 case SETTING_MINUTES: minutes = (minutes >= MAX_MINUTES) ? 0 : minutes + 1; break;
                 case SETTING_SECONDS: seconds = (seconds >= MAX_SECONDS) ? 0 : seconds + 1; break;
+                case SETTING_SOUND:
+                    playSoundOnFinish = !playSoundOnFinish; // Toggle
+                    break;
                 default: break;
             }
         }
@@ -87,6 +99,9 @@ void Timer::setup() {
                 case SETTING_HOURS: hours = (hours <= 0) ? MAX_HOURS : hours - 1; break;
                 case SETTING_MINUTES: minutes = (minutes <= 0) ? MAX_MINUTES : minutes - 1; break;
                 case SETTING_SECONDS: seconds = (seconds <= 0) ? MAX_SECONDS : seconds - 1; break;
+                case SETTING_SOUND:
+                    playSoundOnFinish = !playSoundOnFinish; // Toggle
+                    break;
                 default: break;
             }
         }
@@ -145,7 +160,8 @@ void Timer::loop() {
 
         // Check if timer has completed
         if (elapsedMillis >= duration) {
-            showCompletionScreen();
+            // Play alarm pattern only if enabled
+            if (playSoundOnFinish) { playAlarmPattern(); }
             break;
         }
 
@@ -185,7 +201,7 @@ void Timer::loop() {
     }
 }
 
-void Timer::showCompletionScreen() {
+void Timer::playAlarmPattern() {
     // Display "TIME'S UP!" message
     tft.fillScreen(bruceConfig.bgColor);
     drawMainBorderWithTitle("Timer finished!", false);
@@ -198,10 +214,25 @@ void Timer::showCompletionScreen() {
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.drawCentreString("Press SEL or BACK to stop", timerX, timerY + (2 * LH), 1);
 
-    // Keep the completion screen visible until the user dismisses it.
+    // Alarm pattern loop - continues until user stops it
     while (true) {
+        // Check if user wants to stop the alarm
+        if (check(SelPress) || check(EscPress)) { break; }
+
+        // Pattern:
+        _tone(2000, 1000);
+
         if (check(SelPress) || check(EscPress)) { break; }
         if (responsiveDelay(100)) { break; }
+
+        _tone(6000, 1000);
+
+        if (check(SelPress) || check(EscPress)) { break; }
+        if (responsiveDelay(50)) { break; }
+
+        _tone(6000, 1000);
+        if (check(SelPress) || check(EscPress)) { break; }
+        if (responsiveDelay(800)) { break; }
     }
 }
 
@@ -233,4 +264,34 @@ void Timer::underlineSeconds() {
         underlineY,
         bruceConfig.priColor
     );
+}
+
+void Timer::drawSoundOption(bool highlight) {
+    int optionY = underlineY + (2 * LH); // Position below timer
+
+    tft.setTextSize(1);
+
+    // Choose colors based on highlight state
+    uint16_t textColor = highlight ? bruceConfig.priColor : TFT_DARKGREY;
+    uint16_t statusColor = playSoundOnFinish ? TFT_GREEN : TFT_RED;
+
+    // Clear the line first
+    tft.fillRect(BORDER_PAD_X, optionY, tftWidth - BORDER_PAD_X * 2, LH + 2, bruceConfig.bgColor);
+
+    // Build the option text
+    char optionText[32];
+    snprintf(optionText, sizeof(optionText), "Play sound: %s", playSoundOnFinish ? "ON" : "OFF");
+
+    tft.setTextColor(textColor, bruceConfig.bgColor);
+    tft.drawCentreString(optionText, timerX, optionY, 1);
+
+    // Optional: Draw a small indicator if highlighted
+    if (highlight) {
+        int indicatorY = optionY + LH + 2;
+        int textWidth = strlen(optionText) * LW;
+        int startX = timerX - (textWidth / 2);
+        int endX = timerX + (textWidth / 2);
+
+        tft.drawLine(startX, indicatorY, endX, indicatorY, bruceConfig.priColor);
+    }
 }

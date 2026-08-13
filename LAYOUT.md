@@ -1,19 +1,24 @@
-```text
+```
 .
 ├── boards
-│   ├── _boards_json
-│   │   └── heltec-wifi-lora-32-v4.json
-│   ├── heltec-wifi-lora-32-v4
-│   │   ├── heltec-wifi-lora-32-v4.ini
-│   │   ├── interface.cpp
-│   │   └── validate_webui.py
-│   └── heltec-wifi-lora-32-v4-variant
-│       ├── pins_arduino.h
-│       └── variant.cpp
-├── embedded_resources
-├── include
+│   ├── [board]
+│   │   └── interface.cpp
+│   ├── pinouts
+│   │   ├── pins_arduino.h
+│   │   └── [board].h
+│   ├── [board].json
+│   └── [board].ini
+├── html
+├── media
 ├── lib
+│   ├── utility
+│   └─ ...
+├── include
+│   └─ ...
 ├── src
-├── HELTEC_V4_PORT.md
+│   ├── core
+│   ├── modules
+│   └── main.cpp
+├── test
 └── platformio.ini
 ```

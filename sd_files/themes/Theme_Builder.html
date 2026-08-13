@@ -496,7 +496,10 @@
                 <div class="control-item">
                     <label for="heightInput">Target Device:</label>
                     <select id="heightInput" class="form-select">
-                        <option value="105">Heltec WebUI navigator (105px)</option>
+                        <option value="0">All devices</option>
+                        <option value="105">StickCPlus and Cardputer (105px)</option>
+                        <option value="140">Lilygo T-Embed (140px)</option>
+                        <option value="180">CYD, Core, T-Deck (180px)</option>
                     </select>
                 </div>
                 <div class="control-item">
@@ -549,7 +552,8 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
     <script>
-        const fileNames = ["wifi", "ble", "files", "gps", "interpreter", "lora", "others", "clock", "connect", "config"];
+        const fileNames = ["wifi", "ble","ethernet", "rf", "rfid", "ir", "fm", "files", "gps", "nrf", "interpreter", "lora", "others", "clock", "connect", "config"];
+        //const fileNames = ["wifi", "ble", "rf"];
         const selectedImages = {};
         const placeholderUrl = "https://via.placeholder.com/150";
         const unassignedImages = new Map();

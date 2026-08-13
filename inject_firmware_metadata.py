@@ -1,4 +1,4 @@
-"""PlatformIO pre-build hook for Heltec firmware version metadata."""
+"""PlatformIO pre-build hook for deterministic firmware metadata."""
 
 from pathlib import Path
 import sys
@@ -19,7 +19,4 @@ env.AppendUnique(
         ("GIT_COMMIT_HASH", f'\\"{metadata.commit}\\"'),
     ]
 )
-print(
-    "HELTEC BUILD METADATA: "
-    f"version={metadata.version} commit={metadata.commit}"
-)
+print(f"FIRMWARE BUILD METADATA: version={metadata.version} commit={metadata.commit}")

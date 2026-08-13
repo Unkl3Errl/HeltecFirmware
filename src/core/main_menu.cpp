@@ -7,10 +7,20 @@ MainMenu::MainMenu() {
     _menuItems = {
         &wifiMenu,
         &bleMenu,
+        &rfMenu,
+        &nrf24Menu,
 #if !defined(LITE_VERSION)
         &loraMenu,
 #endif
+#if defined(FM_SI4713) && !defined(LITE_VERSION)
+        &fmMenu,
+#endif
+        &irMenu,
+#if !defined(LITE_VERSION)
+        &ethernetMenu,
+#endif
         &gpsMenu,
+        &rfidMenu,
         &fileMenu,
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
         &scriptsMenu,
@@ -35,7 +45,7 @@ void MainMenu::begin(void) {
         if (find(l.begin(), l.end(), itemName) == l.end()) { // If menu item is not disabled
             options.push_back(
                 {// selected lambda
-                 _menuItems[i]->getName(),
+                 itemName,
                  [this, i]() { _menuItems[i]->optionsMenu(); },
                  false,                                  // selected = false
                  [](void *menuItem, bool shouldRender) { // render lambda
@@ -66,17 +76,25 @@ void MainMenu::begin(void) {
 
 void MainMenu::hideAppsMenu() {
     auto items = this->getItems();
+    int index = 0;
 RESTART: // using gotos to avoid stackoverflow after many choices
     options.clear();
     for (auto item : items) {
         String label = item->getName();
         std::vector<String> l = bruceConfig.disabledMenus;
         bool enabled = find(l.begin(), l.end(), label) == l.end();
-        options.push_back({label, [this, label]() { bruceConfig.addDisabledMenu(label); }, enabled});
+        options.push_back(
+            {label,
+             [this, label, enabled]() {
+                 if (enabled) bruceConfig.addDisabledMenu(label);
+                 else bruceConfig.removeDisabledMenu(label);
+             },
+             enabled}
+        );
     }
     options.push_back({"Show All", [=]() { bruceConfig.disabledMenus.clear(); }, true});
     addOptionToMainMenu();
-    loopOptions(options);
+    index = loopOptions(options, index);
     bruceConfig.saveFile();
     if (!returnToMenu) goto RESTART;
 }

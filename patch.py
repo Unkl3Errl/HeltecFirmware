@@ -8,55 +8,84 @@ if TYPE_CHECKING:
 
 import glob
 import gzip
-from os import makedirs, remove, rename
+import subprocess
+from os import makedirs, remove, replace
 from os.path import basename, dirname, exists, isfile, join
+from shutil import copy2
 
 Import("env")  # type: ignore
 
 FRAMEWORK_DIR = env.PioPlatform().get_package_dir("framework-arduinoespressif32-libs")
 board_mcu = env.BoardConfig()
 mcu = board_mcu.get("build.mcu", "")
-patchflag_path = join(FRAMEWORK_DIR,mcu, "lib", ".patched")
+library_dir = join(FRAMEWORK_DIR, mcu, "lib")
+patchflag_path = join(library_dir, ".patched")
 
-# patch file only if we didn't do it befored
-if not isfile(join(FRAMEWORK_DIR,mcu, "lib", ".patched")):
-    original_file = join(FRAMEWORK_DIR,mcu, "lib", "libnet80211.a")
-    patched_file = join(
-        FRAMEWORK_DIR, mcu, "lib", "libnet80211.a.patched"
-    )
 
-    if mcu=="esp32c5" or mcu=="esp32c6" :
-        env.Execute(
-            "pio pkg exec -p toolchain-riscv32-esp -- riscv32-esp-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-            % (original_file, patched_file)
-        )
-    elif mcu=="esp32p4":
-        """Do nothing"""
+def _tool_path(package_names, executable):
+    for package_name in package_names:
+        package_dir = env.PioPlatform().get_package_dir(package_name)
+        if package_dir:
+            candidate = join(package_dir, "bin", executable)
+            if isfile(candidate):
+                return candidate
+    raise RuntimeError(f"Patch: {executable} was not found in the PlatformIO toolchain")
+
+
+def _touch(path):
+    with open(path, "w") as fp:
+        fp.write("")
+
+
+def patch_net80211():
+    if mcu == "esp32p4":
+        return
+
+    original_file = join(library_dir, "libnet80211.a")
+    backup_file = f"{original_file}.old"
+    patched_file = f"{original_file}.patched"
+
+    # Recover from an interrupted/failed legacy patch before deciding whether
+    # the framework archive is already ready for linking.
+    recovered_legacy_failure = False
+    if not isfile(original_file) and isfile(backup_file):
+        copy2(backup_file, original_file)
+        recovered_legacy_failure = True
+    if isfile(patchflag_path) and isfile(original_file) and not recovered_legacy_failure:
+        return
+    if not isfile(original_file):
+        raise RuntimeError(f"Patch: original archive not found: {original_file}")
+
+    if mcu in ("esp32c2", "esp32c3", "esp32c5", "esp32c6", "esp32h2"):
+        objcopy = _tool_path(("toolchain-riscv32-esp",), "riscv32-esp-elf-objcopy")
     else:
-        env.Execute(
-            "pio pkg exec -p toolchain-xtensa-%s -- xtensa-%s-elf-objcopy  --weaken-symbol=ieee80211_raw_frame_sanity_check %s %s"
-            % (mcu, mcu, original_file, patched_file)
+        objcopy = _tool_path(
+            ("toolchain-xtensa-esp-elf", f"toolchain-xtensa-{mcu}"),
+            f"xtensa-{mcu}-elf-objcopy",
         )
-
-    if isfile("%s.old" % (original_file)):
-        remove("%s.old" % (original_file))
-
-    if isfile(original_file):
-        rename(original_file, "%s.old" % (original_file))
-    else:
-        print("Patch: Original file not found")
 
     if isfile(patched_file):
-        rename(patched_file, original_file)
-    else:
-        print("Patch: Patched file not found")
+        remove(patched_file)
+    subprocess.run(
+        [
+            objcopy,
+            "--weaken-symbol=ieee80211_raw_frame_sanity_check",
+            original_file,
+            patched_file,
+        ],
+        check=True,
+    )
+    if not isfile(patched_file):
+        raise RuntimeError("Patch: objcopy did not create the patched archive")
+
+    # Keep a pristine recovery copy and replace the link input only after the
+    # patched output has been produced successfully.
+    copy2(original_file, backup_file)
+    replace(patched_file, original_file)
+    _touch(patchflag_path)
 
 
-    def _touch(path):
-        with open(path, "w") as fp:
-            fp.write("")
-
-    env.Execute(lambda *args, **kwargs: _touch(patchflag_path))
+patch_net80211()
 
 
 def hash_file(file_path):

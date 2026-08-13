@@ -9,14 +9,21 @@
 struct themeFiles {
     String wifi = "";
     String ble = "";
+    String ethernet = "";
+    String rf = "";
+    String rfid = "";
+    String fm = "";
+    String ir = "";
     String files = "";
     String gps = "";
+    String nrf = "";
     String interpreter = "";
     String others = "";
     String clock = "";
     String connect = "";
     String config = "";
     String boot_img = "";
+    String boot_sound = "";
     String lora = "";
 };
 
@@ -28,14 +35,21 @@ struct themeInfo {
     bool label = true;
     bool wifi = false;
     bool ble = false;
+    bool ethernet = false;
+    bool rf = false;
+    bool rfid = false;
+    bool fm = false;
+    bool ir = false;
     bool files = false;
     bool gps = false;
+    bool nrf = false;
     bool interpreter = false;
     bool others = false;
     bool clock = false;
     bool connect = false;
     bool config = false;
     bool boot_img = false;
+    bool boot_sound = false;
     bool lora = false;
     int gifDuration = 0;
 
@@ -58,8 +72,8 @@ public:
 
     bool openThemeFile(FS *fs, String filepath, bool overwriteConfigSettings);
     bool validateImgFile(FS *fs, String filepath);
-    String getThemeItemImg(String item) {
-        return themePath.substring(0, themePath.lastIndexOf('/')) + "/" + item;
+    const String& getThemeItemImg(const String& item) const {
+        return item;
     };
     void removeTheme(void);
     FS *themeFS(void);

@@ -7,7 +7,7 @@
 #include "esp_netif_net_stack.h"
 #include "modules/wifi/sniffer.h"
 #include "modules/wifi/tcp_utils.h"
-#include <modules/wifi/ARPScanner.h>
+#include <modules/ethernet/ARPScanner.h>
 // #include "modules/wifi/responder.h"
 #endif
 uint32_t wifiCallback(cmd *c) {

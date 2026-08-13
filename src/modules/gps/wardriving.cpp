@@ -26,7 +26,6 @@ extern void heltecV4ReleaseGpsExclusiveUse();
 #if __has_include(<NimBLEExtAdvertising.h>)
 #define NIMBLE_V2_PLUS 1
 #endif
-
 static bool parseMacToU64(const String &mac, uint64_t &out) {
     uint64_t value = 0;
     int nibbles = 0;
@@ -116,11 +115,7 @@ bool Wardriving::begin_gps() {
 void Wardriving::end() {
     if (scanWiFi) wifiDisconnect();
     if (scanBLE) {
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-        esp_bt_controller_deinit();
-#else
         BLEDevice::deinit(true);
-#endif
         pBLEScan = nullptr;
         bleInitialized = false;
     }
@@ -265,9 +260,9 @@ void Wardriving::scanWiFiBLE() {
 
     if (is_new_file) {
         file.println(
-            "WigleWifi-1.6,appRelease=v" + String(BRUCE_VERSION) +
-            ",model=Heltec WiFi LoRa 32 V4,release=v" + String(BRUCE_VERSION) +
-            ",device=ESP32-S3,display=OLED,board=Heltec WiFi LoRa 32 V4,brand=Bruce,star=Sol,body=4,subBody=1"
+            "WigleWifi-1.6,appRelease=v" + String(BRUCE_VERSION) + ",model=M5Stack GPS Unit,release=v" +
+            String(BRUCE_VERSION) +
+            ",device=ESP32 M5Stack,display=SPI TFT,board=ESP32 M5Stack,brand=Bruce,star=Sol,body=4,subBody=1"
         );
         file.println(
             "MAC,SSID,AuthMode,FirstSeen,Channel,Frequency,RSSI,CurrentLatitude,CurrentLongitude,"
@@ -521,12 +516,15 @@ void Wardriving::create_filename() {
 
 void Wardriving::releasePins() {
     rxPinReleased = false;
-    if (
+    if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
+        bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #if !defined(LITE_VERSION)
+        bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
         bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
         bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
-        // Release a shared peripheral pin so the GPS UART can drive it.
+        // T-Embed CC1101 and T-Display S3 Touch ties this pin to the NRF24 CS;
+        // switch it to input so the GPS UART can drive it.
         pinMode(bruceConfigPins.gps_bus.rx, INPUT);
         rxPinReleased = true;
     }
@@ -552,20 +550,28 @@ void Wardriving::checkForAlert(const String &macAddress, const String &deviceTyp
 
 void Wardriving::restorePins() {
     if (rxPinReleased) {
-        if (
+        if (bruceConfigPins.CC1101_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
+            bruceConfigPins.NRF24_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #if !defined(LITE_VERSION)
+            bruceConfigPins.W5500_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
             bruceConfigPins.LoRa_bus.checkConflict(bruceConfigPins.gps_bus.rx) ||
 #endif
             bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.gps_bus.rx)) {
             // Restore the original board state after leaving the GPS app s
             // o the radio/other peripherals behave as expected
             pinMode(bruceConfigPins.gps_bus.rx, OUTPUT);
-            if (
+            if (bruceConfigPins.gps_bus.rx == bruceConfigPins.CC1101_bus.cs ||
+                bruceConfigPins.gps_bus.rx == bruceConfigPins.NRF24_bus.cs ||
+#if !defined(LITE_VERSION)
+                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
+                bruceConfigPins.gps_bus.rx == bruceConfigPins.W5500_bus.cs ||
+#endif
                 bruceConfigPins.gps_bus.rx == bruceConfigPins.SDCARD_bus.cs) {
                 // If it is conflicting to an SPI CS pin, keep it HIGH
                 digitalWrite(bruceConfigPins.gps_bus.rx, HIGH);
             } else {
                 // If it is conflicting with any other SPI pin, keep it LOW
+                // Avoids CC1101 Jamming and nRF24 radio to keep enabled
                 digitalWrite(bruceConfigPins.gps_bus.rx, LOW);
             }
         }

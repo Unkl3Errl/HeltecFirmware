@@ -1,11 +1,14 @@
 #include "core/main_menu.h"
 #include <globals.h>
 
+#include "core/bus_HAL.h"
 #include "core/powerSave.h"
+#include "core/ram_profile.h"
 #include "core/serial_commands/cli.h"
 #include "core/utils.h"
 #include "current_year.h"
 #include "esp32-hal-psram.h"
+#include "esp_heap_caps.h"
 #include "esp_task_wdt.h"
 #include "esp_wifi.h"
 #include <functional>
@@ -24,6 +27,14 @@ String startupAppJSInterpreterFile = "";
 
 MainMenu mainMenu;
 SPIClass sdcardSPI;
+#ifdef USE_HSPI_PORT
+#ifndef VSPI
+#define VSPI FSPI
+#endif
+SPIClass AUX_SPI(VSPI);
+#else
+SPIClass AUX_SPI(HSPI);
+#endif
 
 // Navigation Variables
 volatile bool NextPress = false;
@@ -48,6 +59,27 @@ TouchPoint touchPoint;
 
 keyStroke KeyStroke;
 
+volatile int32_t RotaryNetSteps = 0;
+
+#ifdef HAS_ENCODER
+// Default no-op: boards that define HAS_ENCODER but don't implement
+// pollEncoder() (shouldn't happen, but keeps the linker happy either way).
+void __attribute__((weak)) pollEncoder(void) {}
+
+// Dedicated, high-priority, tight-cadence task that does nothing but sample
+// the rotary encoder A/B lines -- mirrors the Flipper port's input_srv,
+// which runs encoder_poll() on its own thread every 4ms, decoupled from
+// GUI/app work so the raw quadrature read is never delayed by rendering
+// or by whether the previous input event has been consumed yet. Only
+// exists on HAS_ENCODER boards; other boards pay zero cost for this.
+static void taskEncoderPoll(void *parameter) {
+    while (true) {
+        pollEncoder();
+        vTaskDelay(pdMS_TO_TICKS(4));
+    }
+}
+#endif
+
 TaskHandle_t xHandle;
 void __attribute__((weak)) taskInputHandler(void *parameter) {
     auto timer = millis();
@@ -70,7 +102,10 @@ void __attribute__((weak)) taskInputHandler(void *parameter) {
             PrevPagePress = false;
             touchPoint.pressed = false;
             touchPoint.Clear();
+            checkAndRecoverSysI2CBus();
+#ifndef USE_TFT_eSPI_TOUCH
             InputHandler();
+#endif
             timer = millis();
         }
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -133,6 +168,7 @@ volatile int tftWidth = VECTOR_DISPLAY_DEFAULT_HEIGHT;
 volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #endif
 
+#include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/led_control.h"
 #include "core/mykeyboard.h"
@@ -142,6 +178,8 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #include "core/wifi/webInterface.h"
 #include "core/wifi/wifi_common.h"
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
+#include "modules/others/audio.h"                // for playAudioFile
+#include "modules/rf/rf_utils.h"                 // for initCC1101once
 #include <Wire.h>
 
 /*********************************************************************
@@ -149,7 +187,11 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
  **  Config LittleFS and SD storage
  *********************************************************************/
 void begin_storage() {
-    if (!LittleFS.begin(true)) { LittleFS.format(), LittleFS.begin(); }
+    if (!setupLittleFS()) {
+        LittleFS.format();
+        setupLittleFS();
+    }
+    RAM_LOG("after LittleFS");
     bool checkFS = setupSdCard();
     bruceConfig.fromFile(checkFS);
     bruceConfigPins.fromFile(checkFS);
@@ -170,6 +212,14 @@ void _post_setup_gpio() __attribute__((weak));
 void _post_setup_gpio() {}
 
 /*********************************************************************
+ **  Function: _pre_storage_gpio()
+ **  Sets up a weak (empty) function for board fixes that must run
+ **  after the first TFT access and before storage is mounted.
+ *********************************************************************/
+void _pre_storage_gpio() __attribute__((weak));
+void _pre_storage_gpio() {}
+
+/*********************************************************************
  **  Function: setup_gpio
  **  Setup GPIO pins
  *********************************************************************/
@@ -178,8 +228,15 @@ void setup_gpio() {
     // init setup from /ports/*/interface.h
     _setup_gpio();
 
-    // Initialize the optional board I/O expander when present.
+    // Smoochiee v2 uses a AW9325 tro control GPS, MIC, Vibro and CC1101 RX/TX powerlines
     ioExpander.init(IO_EXPANDER_ADDRESS, &Wire);
+
+    initCC1101once(acquireSPIBus(
+        bruceConfigPins.CC1101_bus.sck, bruceConfigPins.CC1101_bus.miso, bruceConfigPins.CC1101_bus.mosi
+    ));
+    // acquireSPIBus() returns nullptr when these pins have no hardware controller left (e.g.
+    // ARDUINO_M5STICK_C_PLUS and others that don't share SPI with the display/SD/aux bus);
+    // initCC1101once(NULL) lets the driver fall back to managing the default SPI object itself.
 }
 
 /*********************************************************************
@@ -344,6 +401,7 @@ void init_clock() {
     clock_set = true;
     struct timeval tv = {.tv_sec = epoch};
     settimeofday(&tv, nullptr);
+    restorePersistedClock(); // override the default with the last-saved time (NVS) + start periodic save
 #endif
 }
 
@@ -354,6 +412,32 @@ void init_clock() {
 void init_led() {
 #ifdef HAS_RGB_LED
     beginLed();
+#endif
+}
+
+/*********************************************************************
+ **  Function: startup_sound
+ **  Play sound or tone depending on device hardware
+ *********************************************************************/
+void startup_sound() {
+    if (bruceConfig.soundEnabled == 0) return; // if sound is disabled, do not play sound
+#if !defined(LITE_VERSION)
+#if defined(BUZZ_PIN)
+    // Bip M5 just because it can. Does not bip if splashscreen is bypassed
+    _tone(5000, 50);
+    delay(200);
+    _tone(5000, 50);
+    /*  2fix: menu infinite loop */
+#elif defined(HAS_NS4168_SPKR)
+    // play a boot sound
+    if (bruceConfig.theme.boot_sound) {
+        playAudioFile(bruceConfig.themeFS(), bruceConfig.getThemeItemImg(bruceConfig.theme.paths.boot_sound));
+    } else if (SD.exists("/boot.wav")) {
+        playAudioFile(&SD, "/boot.wav");
+    } else if (LittleFS.exists("/boot.wav")) {
+        playAudioFile(&LittleFS, "/boot.wav");
+    }
+#endif
 #endif
 }
 
@@ -369,11 +453,22 @@ void setup() {
 
     log_d("Total heap: %d", ESP.getHeapSize());
     log_d("Free heap: %d", ESP.getFreeHeap());
-    if (psramInit()) log_d("PSRAM Started");
-    if (psramFound()) log_d("PSRAM Found");
-    else log_d("PSRAM Not Found");
-    log_d("Total PSRAM: %d", ESP.getPsramSize());
-    log_d("Free PSRAM: %d", ESP.getFreePsram());
+    bool psramStarted = psramInit();
+    // Printed unconditionally (boards force CORE_DEBUG_LEVEL=1, so log_d is invisible).
+    // If PSRAM fails to init, a PSRAM board effectively becomes a no-PSRAM board and
+    // Wi-Fi + BLE cannot coexist. This one boot line makes that failure mode observable.
+    Serial.printf(
+        "[PSRAM] init=%d found=%d total=%u free=%u | internal free=%u largest=%u\n",
+        psramStarted,
+        psramFound(),
+        (unsigned)ESP.getPsramSize(),
+        (unsigned)ESP.getFreePsram(),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)
+    );
+    Serial.flush();
+
+    RAM_LOG("setup-start");
 
     // declare variables
     prog_handler = 0;
@@ -394,6 +489,7 @@ void setup() {
     // bruceConfig is not read yet.. just to show something on screen due to long boot time
     tft.setTextColor(TFT_PURPLE, TFT_BLACK);
     tft.drawCentreString("Booting", tft.width() / 2, tft.height() / 2, 1);
+    RAM_LOG("first-display-elem"); // first element drawn on screen
 #else
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     // SerialDisplayClass::begin() waits indefinitely for a USB CDC host.
@@ -407,7 +503,9 @@ void setup() {
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     heltecV4DrawBootStage("Storage init");
 #endif
+    _pre_storage_gpio();
     begin_storage();
+    RAM_LOG("after-storage"); // bruceConfig/bruceConfigPins loaded from FS
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     heltecV4DrawBootStage("Config + display");
 #endif
@@ -417,8 +515,11 @@ void setup() {
 #endif
     init_clock();
     init_led();
+    RAM_LOG("after-tft-clock-led");
 
     options.reserve(20); // preallocate some options space to avoid fragmentation
+
+    RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
     // Set WiFi country to avoid warnings and ensure max power
     const wifi_country_t country = {
@@ -434,7 +535,7 @@ void setup() {
     esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
     esp_wifi_set_country(&country);
 
-    // Complete board-specific GPIO setup after the display and storage setup.
+    // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     extern void heltecFieldLoggerBegin();
@@ -449,6 +550,7 @@ void setup() {
     setBrightness(bruceConfig.bright, false);
     // end of post gpio begin
 
+    // #ifndef USE_TFT_eSPI_TOUCH
     // This task keeps running all the time, will never stop
     xTaskCreate(
         taskInputHandler,              // Task function
@@ -458,10 +560,25 @@ void setup() {
         2,                             // Task priority (0 to 3), loopTask has priority 2.
         &xHandle                       // Task handle (not used)
     );
+#ifdef HAS_ENCODER
+    // Dedicated encoder sampling task, higher priority than loopTask so a
+    // busy render/redraw pass can never delay reading the A/B lines.
+    // Only created on boards with a rotary encoder.
+    xTaskCreate(
+        taskEncoderPoll, // Task function
+        "EncoderPoll",   // Task Name
+        2048,            // Stack size
+        NULL,            // Task parameters
+        3,               // Task priority (0 to 3), higher than loopTask's 2
+        NULL             // Task handle (not used)
+    );
+#endif
+    // #endif
 #if defined(HAS_SCREEN)
     bruceConfig.openThemeFile(bruceConfig.themeFS(), bruceConfig.themePath, false);
     if (!bruceConfig.instantBoot) {
         boot_screen_anim();
+        startup_sound();
     }
     if (bruceConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");
@@ -485,6 +602,8 @@ void setup() {
     if (bruceConfig.startupApp != "" && !startupApp.startApp(bruceConfig.startupApp)) {
         bruceConfig.setStartupApp("");
     }
+
+    RAM_LOG("setup-end");
 }
 
 /**********************************************************************
@@ -509,6 +628,14 @@ void loop() {
     }
 #endif
     tft.fillScreen(bruceConfig.bgColor);
+
+#if defined(ENABLE_RAM_LOGGING)
+    static bool ramLoggedFirstMenu = false;
+    if (!ramLoggedFirstMenu) {
+        RAM_LOG("first-mainMenu");
+        ramLoggedFirstMenu = true;
+    }
+#endif
 
     mainMenu.begin();
     delay(1);

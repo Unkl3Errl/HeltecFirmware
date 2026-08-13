@@ -1,4 +1,4 @@
-"""Resolve deterministic build identity for the Heltec V4 firmware."""
+"""Resolve deterministic build identity for the customized board firmware."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import subprocess
 from typing import Mapping, Sequence
 
 
-RELEASE_TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+RELEASE_TAG = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-mobile\.(\d+))?$")
 SAFE_VALUE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]*$")
 MAX_VERSION_LENGTH = 32
 MAX_COMMIT_LENGTH = 48
@@ -35,7 +35,17 @@ def release_version(tag: str) -> str | None:
     match = RELEASE_TAG.fullmatch(tag.strip())
     if not match:
         return None
-    return ".".join(match.groups())
+    major, minor, patch, mobile = match.groups()
+    version = f"{major}.{minor}.{patch}"
+    return f"{version}-mobile.{mobile}" if mobile is not None else version
+
+
+def _version_key(version: str) -> tuple[int, int, int, int]:
+    match = RELEASE_TAG.fullmatch(version)
+    if not match:
+        return (0, 0, 0, 0)
+    major, minor, patch, mobile = match.groups()
+    return (int(major), int(minor), int(patch), int(mobile or 0))
 
 
 def select_version(
@@ -54,13 +64,10 @@ def select_version(
         if value:
             return value
 
-    releases = []
-    for tag in exact_tags:
-        value = release_version(tag)
-        if value:
-            releases.append((tuple(int(part) for part in value.split(".")), value))
+    releases = [release_version(tag) for tag in exact_tags]
+    releases = [version for version in releases if version is not None]
     if releases:
-        return max(releases)[1]
+        return max(releases, key=_version_key)
     return "dev"
 
 
@@ -70,8 +77,7 @@ def select_commit(
     git_sha: str | None,
     dirty: bool,
 ) -> str:
-    candidate = explicit or github_sha or git_sha or "unknown"
-    candidate = candidate.strip()
+    candidate = (explicit or github_sha or git_sha or "unknown").strip()
     if re.fullmatch(r"[0-9a-fA-F]{13,64}", candidate):
         candidate = candidate[:12].lower()
     candidate = _safe_value("firmware commit", candidate, MAX_COMMIT_LENGTH)
@@ -100,18 +106,18 @@ def resolve_build_metadata(
     values = os.environ if environ is None else environ
     tags_output = _git(project_dir, "tag", "--points-at", "HEAD") or ""
     git_sha = _git(project_dir, "rev-parse", "HEAD")
-    dirty_output = _git(project_dir, "status", "--porcelain")
-    dirty = bool(dirty_output)
-    version = select_version(
-        values.get("HELTEC_FIRMWARE_VERSION"),
-        values.get("GITHUB_REF_TYPE"),
-        values.get("GITHUB_REF_NAME"),
-        tags_output.splitlines(),
+    dirty = bool(_git(project_dir, "status", "--porcelain"))
+    return BuildMetadata(
+        version=select_version(
+            values.get("HELTEC_FIRMWARE_VERSION"),
+            values.get("GITHUB_REF_TYPE"),
+            values.get("GITHUB_REF_NAME"),
+            tags_output.splitlines(),
+        ),
+        commit=select_commit(
+            values.get("HELTEC_FIRMWARE_COMMIT"),
+            values.get("GITHUB_SHA"),
+            git_sha,
+            dirty,
+        ),
     )
-    commit = select_commit(
-        values.get("HELTEC_FIRMWARE_COMMIT"),
-        values.get("GITHUB_SHA"),
-        git_sha,
-        dirty,
-    )
-    return BuildMetadata(version=version, commit=commit)
