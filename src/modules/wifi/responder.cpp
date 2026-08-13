@@ -9,6 +9,7 @@ https://github.com/7h30th3r0n3/Evil-M5Project
 #ifndef LITE_VERSION
 #include "responder.h"
 #include "clients.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
@@ -288,7 +289,9 @@ void extractAndPrintHash(uint8_t *pkt, uint32_t smbLength, uint8_t *ntlm) {
     Serial.println(F("------------------------------------"));
 
     // 8. Save sur SD
-    File file = SD.open("/NTLM/ntlm_hashes.txt", FILE_APPEND);
+    const String outputPath = "/NTLM/ntlm_hashes.txt";
+    AndroidStorageActiveGuard storageGuard(outputPath);
+    File file = SD.open(outputPath, FILE_APPEND);
     if (file) {
         file.println(finalHash);
         file.close();

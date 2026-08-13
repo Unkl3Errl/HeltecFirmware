@@ -1,6 +1,7 @@
 #ifndef LITE_VERSION
 #include "karma_attack.h"
 #include "FS.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
@@ -811,6 +812,7 @@ void savePortalCredentials(
     }
 
     String filename = "/PortalCreds/" + portalId + ".txt";
+    AndroidStorageActiveGuard credentialGuard(filename, fs == &SD);
     File file = fs->open(filename, FILE_WRITE);
     if (file) {
         file.println("=== PORTAL CAPTURE ===");
@@ -827,7 +829,9 @@ void savePortalCredentials(
         Serial.printf("[PORTAL] Credentials saved to %s\n", filename.c_str());
     }
 
-    File logFile = fs->open("/PortalCreds/captures_master.txt", FILE_APPEND);
+    const String masterPath = "/PortalCreds/captures_master.txt";
+    AndroidStorageActiveGuard masterGuard(masterPath, fs == &SD);
+    File logFile = fs->open(masterPath, FILE_APPEND);
     if (logFile) {
         logFile.printf(
             "Time:%lu | Portal:%s | SSID:%s | ID:%s | PWD:%s | MAC:%s | CH:%d\n",
@@ -1988,6 +1992,7 @@ void saveCredentialsToFile(String ssid, String password) {
     FS *saveFs = nullptr;
     if (!getFsStorage(saveFs)) return;
     String filename = "/ProbeData/credentials.txt";
+    AndroidStorageActiveGuard storageGuard(filename, saveFs == &SD);
     if (!saveFs->exists(filename)) {
         File initFile = saveFs->open(filename, FILE_WRITE);
         if (initFile) {
@@ -2168,6 +2173,7 @@ void handleBroadcastResponse(const String &ssid, const String &mac) {
 void saveProbesToPCAP(FS &fs) {
     if (!storageAvailable) return;
     String filename = "/ProbeData/karma_capture_" + String(millis()) + ".pcap";
+    AndroidStorageActiveGuard storageGuard(filename, &fs == &SD);
     File file = fs.open(filename, FILE_WRITE);
     if (!file) {
         Serial.println("[PCAP] Failed to create file");
@@ -2243,6 +2249,7 @@ void saveHandshakeToFile(const HandshakeCapture &hs) {
     filename.replace(" ", "_");
     filename.replace("*", "");
 
+    AndroidStorageActiveGuard storageGuard(filename, fs == &SD);
     File file = fs->open(filename, FILE_APPEND);
     if (file) {
         uint32_t ts_sec = hs.timestamp / 1000;
@@ -2513,6 +2520,7 @@ void saveNetworkHistory(FS &fs) {
     if (!storageAvailable) return;
     if (!fs.exists("/ProbeData")) fs.mkdir("/ProbeData");
     String filename = "/ProbeData/network_history_" + String(millis()) + ".csv";
+    AndroidStorageActiveGuard storageGuard(filename, &fs == &SD);
     File file = fs.open(filename, FILE_WRITE);
     if (file) {
         file.println("SSID,ResponsesSent,SuccessfulConnections,LastResponse");
@@ -3308,6 +3316,7 @@ void karma_setup() {
 void saveProbesToFile(FS &fs, bool compressed) {
     if (!storageAvailable) return;
     if (!fs.exists("/ProbeData")) fs.mkdir("/ProbeData");
+    AndroidStorageActiveGuard storageGuard(filen, &fs == &SD);
     if (compressed) {
         File file = fs.open(filen, FILE_WRITE);
         if (file) {

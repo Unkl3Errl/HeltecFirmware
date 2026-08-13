@@ -1,4 +1,4 @@
-#ifdef USE_SD_MMC
+#if defined(USE_SD_MMC) && !defined(HELTEC_ANDROID_STORAGE)
 #include "../SD.h"
 
 #include "io_pin_remap.h"

@@ -431,7 +431,7 @@ uint8_t menuSize(OledScreen screen) {
 
 const char *menuTitle(OledScreen screen) {
     switch (screen) {
-        case OledScreen::Root: return "BRUCE / HELTEC";
+        case OledScreen::Root: return "BRUCE";
         case OledScreen::Dashboard: return "DASHBOARD";
         case OledScreen::Gps: return "GPS MONITOR";
         case OledScreen::Lora: return "LORA RECEIVER";
@@ -493,10 +493,10 @@ void drawWebUiPage() {
     oled.setFont(u8g2_font_6x12_tf);
     const char *title = statusPage == 0   ? "BRUCE WEBUI READY"
                         : statusPage == 1 ? "BRUCE WEBUI LOGIN"
-                        : statusPage == 2 ? "HELTEC LIVE GPS"
-                        : statusPage == 3 ? "HELTEC LORA RX"
-                        : statusPage == 4 ? "HELTEC HARDWARE"
-                                          : "HELTEC FIELD LOG";
+                        : statusPage == 2 ? "LIVE GPS"
+                        : statusPage == 3 ? "LORA RX"
+                        : statusPage == 4 ? "HARDWARE"
+                                          : "FIELD LOG";
     drawLine(11, title);
     oled.drawHLine(0, 14, 128);
     if (statusPage == 1) {
@@ -743,7 +743,7 @@ void _setup_gpio() {
     oled.setFontMode(1);
     oled.clearBuffer();
     oled.setFont(u8g2_font_6x12_tf);
-    drawLine(13, "BRUCE / HELTEC V4");
+    drawLine(13, "BRUCE // SYSTEM");
     oled.drawHLine(0, 16, 128);
     drawLine(34, "Starting firmware...");
     drawLine(50, "Standalone + WebUI");

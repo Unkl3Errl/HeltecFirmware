@@ -17,7 +17,7 @@
 #include "modules/gps/wardriving.h"
 #include "modules/pwnagotchi/pwnagotchi.h"
 #include "modules/wifi/sniffer.h"
-#ifdef SOC_USB_OTG_SUPPORTED
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
 #include "core/massStorage.h"
 #endif
 
@@ -28,7 +28,7 @@ StartupApp::StartupApp() {
     _startupApps["GPS Tracker"] = []() { GPSTracker(); };
 #endif
     _startupApps["Clock"] = []() { runClockLoop(); };
-#if defined(SOC_USB_OTG_SUPPORTED)
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
     _startupApps["Wardriving"] = []() { Wardriving(); };

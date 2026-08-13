@@ -67,6 +67,7 @@ struct HeltecFieldLogSnapshot {
     uint32_t lastBleAtMs = 0;
     uint32_t lastWifiAtMs = 0;
     size_t sessionBytes = 0;
+    size_t segmentBytes = 0;
     String fileName;
     String lastError;
     String resetReason;
@@ -88,5 +89,19 @@ HeltecFieldLogSnapshot heltecFieldLoggerSnapshot();
 String heltecFieldLoggerStatusJson();
 String heltecFieldLoggerFilesJson();
 String heltecFieldLoggerDownloadPath(const String &fileName);
+bool heltecFieldLoggerReadArchiveChunk(
+    const String &fileName,
+    size_t offset,
+    size_t length,
+    String &outputJson,
+    String &error
+);
+bool heltecFieldLoggerAcknowledgeArchive(
+    const String &fileName,
+    size_t expectedSize,
+    uint32_t expectedCrc32,
+    String &outputJson,
+    String &error
+);
 bool heltecFieldLoggerIsActive();
 bool heltecFieldLoggerUsesGps();

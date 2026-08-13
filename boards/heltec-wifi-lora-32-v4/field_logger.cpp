@@ -5,6 +5,7 @@
 #include <NimBLEDevice.h>
 #include <Preferences.h>
 #include <esp_system.h>
+#include <mbedtls/base64.h>
 
 extern bool heltecV4GpsMonitorActive();
 extern bool heltecV4SetGpsMonitor(bool enabled);
@@ -15,6 +16,11 @@ constexpr char kDirectory[] = "/BruceFieldLogs";
 constexpr char kPreferencesNamespace[] = "hl_field";
 constexpr uint32_t kFormatVersion = 1;
 constexpr size_t kMinimumFreeBytes = 256 * 1024;
+// Closed segments are immutable archive units. Keeping them bounded makes it
+// possible for Android to drain them faster than the logger can fill flash and
+// resume an interrupted transfer without rereading an entire drive session.
+constexpr size_t kSegmentTargetBytes = 128 * 1024;
+constexpr size_t kMaximumArchiveReadBytes = 384;
 constexpr size_t kMaximumListedFiles = 64;
 constexpr size_t kUniqueBleCapacity = 256;
 constexpr size_t kRecentBleCapacity = 128;
@@ -76,6 +82,7 @@ uint32_t lastGpsAtMs = 0;
 uint32_t lastBleAtMs = 0;
 uint32_t lastWifiAtMs = 0;
 size_t sessionBytes = 0;
+size_t segmentBytes = 0;
 String currentPath;
 String lastError;
 String resetReason;
@@ -89,6 +96,8 @@ bool latestGpsValid = false;
 double latestLatitude = 0.0;
 double latestLongitude = 0.0;
 uint32_t latestGpsAtMs = 0;
+
+void persistSessionLocked();
 
 class LoggerLock {
 public:
@@ -221,6 +230,7 @@ void clearSessionStateLocked() {
     lastBleAtMs = 0;
     lastWifiAtMs = 0;
     sessionBytes = 0;
+    segmentBytes = 0;
     lastError = "";
     latestGpsValid = false;
     latestGpsAtMs = 0;
@@ -296,7 +306,29 @@ bool appendRecordLocked(JsonDocument &document) {
         preferences.putBool("active", false);
         return false;
     }
-    const size_t recordBytes = measureJson(document) + 1;
+    size_t recordBytes = measureJson(document) + 1;
+    if (active && segmentBytes > 0 && segmentBytes + recordBytes > kSegmentTargetBytes) {
+        if (segment == UINT32_MAX) {
+            lastError = "field log segment counter exhausted";
+            active = false;
+            cleanupRequested = true;
+            bleStopRequested = true;
+            preferences.putBool("active", false);
+            return false;
+        }
+        segment++;
+        currentPath = makePath(sessionId, segment);
+        segmentBytes = 0;
+        persistSessionLocked();
+
+        // The record was assembled before rotation. Rewrite its common fields
+        // so every line agrees with the immutable segment that contains it.
+        document["sessionId"] = sessionId;
+        document["segment"] = segment;
+        document["bootCount"] = bootCount;
+        document["uptimeMs"] = millis();
+        recordBytes = measureJson(document) + 1;
+    }
     const size_t total = LittleFS.totalBytes();
     const size_t used = LittleFS.usedBytes();
     if (total <= used || total - used < kMinimumFreeBytes + recordBytes) {
@@ -330,7 +362,46 @@ bool appendRecordLocked(JsonDocument &document) {
         return false;
     }
     sessionBytes += recordBytes;
+    segmentBytes += recordBytes;
     return true;
+}
+
+uint32_t updateCrc32(uint32_t crc, const uint8_t *data, size_t length) {
+    for (size_t index = 0; index < length; index++) {
+        crc ^= data[index];
+        for (uint8_t bit = 0; bit < 8; bit++) {
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+        }
+    }
+    return crc;
+}
+
+bool fileCrc32Locked(const String &path, uint32_t &output) {
+    File file = LittleFS.open(path, FILE_READ);
+    if (!file || file.isDirectory()) {
+        if (file) file.close();
+        return false;
+    }
+    uint8_t buffer[1024];
+    uint32_t crc = 0xFFFFFFFFu;
+    while (file.available()) {
+        const size_t received = file.read(buffer, sizeof(buffer));
+        if (received == 0) {
+            file.close();
+            return false;
+        }
+        crc = updateCrc32(crc, buffer, received);
+        delay(0);
+    }
+    file.close();
+    output = ~crc;
+    return true;
+}
+
+String crc32Text(uint32_t value) {
+    char output[9];
+    snprintf(output, sizeof(output), "%08lX", static_cast<unsigned long>(value));
+    return String(output);
 }
 
 bool fileHasCompleteTail(const String &path) {
@@ -451,6 +522,7 @@ void reconstructSessionLocked() {
         if (!entry.isDirectory() && name.startsWith(prefix) && name.endsWith(".ndjson")) {
             entry.setBufferSize(kReconstructionReadBlockBytes);
             sessionBytes += entry.size();
+            if (String(entry.path()) == currentPath) segmentBytes = entry.size();
             String line;
             line.reserve(512);
             size_t bytesRead = 0;
@@ -681,6 +753,7 @@ void heltecFieldLoggerBegin() {
                     segment++;
                     recoveredSegments++;
                     currentPath = makePath(sessionId, segment);
+                    segmentBytes = 0;
                     persistSessionLocked();
                 }
                 JsonDocument document;
@@ -950,6 +1023,7 @@ HeltecFieldLogSnapshot heltecFieldLoggerSnapshot() {
     snapshot.lastBleAtMs = lastBleAtMs;
     snapshot.lastWifiAtMs = lastWifiAtMs;
     snapshot.sessionBytes = sessionBytes;
+    snapshot.segmentBytes = segmentBytes;
     snapshot.fileName = basenameOf(currentPath);
     snapshot.lastError = lastError;
     snapshot.resetReason = resetReason;
@@ -995,6 +1069,8 @@ String heltecFieldLoggerStatusJson() {
     document["storage"]["directory"] = kDirectory;
     document["storage"]["fileName"] = snapshot.fileName;
     document["storage"]["sessionBytes"] = static_cast<uint64_t>(snapshot.sessionBytes);
+    document["storage"]["segmentBytes"] = static_cast<uint64_t>(snapshot.segmentBytes);
+    document["storage"]["segmentTargetBytes"] = static_cast<uint64_t>(kSegmentTargetBytes);
     document["storage"]["totalBytes"] = static_cast<uint64_t>(LittleFS.totalBytes());
     document["storage"]["usedBytes"] = static_cast<uint64_t>(LittleFS.usedBytes());
     document["storage"]["minimumFreeBytes"] = kMinimumFreeBytes;
@@ -1026,7 +1102,16 @@ String heltecFieldLoggerFilesJson() {
                     item["name"] = name;
                     item["sizeBytes"] = static_cast<uint64_t>(entry.size());
                     item["active"] = active && String(entry.path()) == currentPath;
-                    item["tailComplete"] = fileHasCompleteTail(String(entry.path()));
+                    const bool tailComplete = fileHasCompleteTail(String(entry.path()));
+                    const bool archiveReady = !(active && String(entry.path()) == currentPath) && tailComplete;
+                    item["tailComplete"] = tailComplete;
+                    item["archiveReady"] = archiveReady;
+                    if (archiveReady) {
+                        uint32_t crc32 = 0;
+                        if (fileCrc32Locked(String(entry.path()), crc32)) {
+                            item["crc32"] = crc32Text(crc32);
+                        }
+                    }
                     listed++;
                 }
             }
@@ -1047,6 +1132,148 @@ String heltecFieldLoggerDownloadPath(const String &fileName) {
     if (!isSafeFileName(fileName)) return "";
     const String path = String(kDirectory) + "/" + fileName;
     return LittleFS.exists(path) ? path : "";
+}
+
+bool heltecFieldLoggerReadArchiveChunk(
+    const String &fileName,
+    size_t offset,
+    size_t length,
+    String &outputJson,
+    String &error
+) {
+    outputJson = "";
+    error = "";
+    if (!isSafeFileName(fileName)) {
+        error = "invalid field-log file name";
+        return false;
+    }
+    if (length == 0 || length > kMaximumArchiveReadBytes) {
+        error = "invalid field-log read length";
+        return false;
+    }
+
+    LoggerLock lock;
+    if (!lock) {
+        error = "field logger is busy";
+        return false;
+    }
+    const String path = String(kDirectory) + "/" + fileName;
+    if (active && path == currentPath) {
+        error = "active field-log segment is not archiveable";
+        return false;
+    }
+    if (!LittleFS.exists(path) || !fileHasCompleteTail(path)) {
+        error = "field-log segment is not archiveable";
+        return false;
+    }
+
+    File file = LittleFS.open(path, FILE_READ);
+    if (!file || file.isDirectory()) {
+        if (file) file.close();
+        error = "field-log segment could not be opened";
+        return false;
+    }
+    const size_t fileSize = file.size();
+    if (offset > fileSize) {
+        file.close();
+        error = "field-log offset is beyond end of file";
+        return false;
+    }
+    const size_t actualLength = min(length, fileSize - offset);
+    if (!file.seek(offset)) {
+        file.close();
+        error = "field-log seek failed";
+        return false;
+    }
+    uint8_t input[kMaximumArchiveReadBytes];
+    const size_t received = file.read(input, actualLength);
+    file.close();
+    if (received != actualLength) {
+        error = "field-log read was incomplete";
+        return false;
+    }
+
+    unsigned char encoded[((kMaximumArchiveReadBytes + 2) / 3) * 4 + 1];
+    size_t encodedLength = 0;
+    if (
+        mbedtls_base64_encode(encoded, sizeof(encoded), &encodedLength, input, received) != 0
+    ) {
+        error = "field-log base64 encoding failed";
+        return false;
+    }
+    encoded[encodedLength] = '\0';
+
+    JsonDocument document;
+    document["name"] = fileName;
+    document["sizeBytes"] = static_cast<uint64_t>(fileSize);
+    document["offset"] = static_cast<uint64_t>(offset);
+    document["length"] = static_cast<uint64_t>(received);
+    document["encoding"] = "base64";
+    document["data"] = reinterpret_cast<const char *>(encoded);
+    serializeJson(document, outputJson);
+    return true;
+}
+
+bool heltecFieldLoggerAcknowledgeArchive(
+    const String &fileName,
+    size_t expectedSize,
+    uint32_t expectedCrc32,
+    String &outputJson,
+    String &error
+) {
+    outputJson = "";
+    error = "";
+    if (!isSafeFileName(fileName)) {
+        error = "invalid field-log file name";
+        return false;
+    }
+
+    LoggerLock lock;
+    if (!lock) {
+        error = "field logger is busy";
+        return false;
+    }
+    const String path = String(kDirectory) + "/" + fileName;
+    if (active && path == currentPath) {
+        error = "active field-log segment cannot be acknowledged";
+        return false;
+    }
+    if (!LittleFS.exists(path) || !fileHasCompleteTail(path)) {
+        error = "field-log segment is not archiveable";
+        return false;
+    }
+    File file = LittleFS.open(path, FILE_READ);
+    if (!file || file.isDirectory()) {
+        if (file) file.close();
+        error = "field-log segment could not be opened";
+        return false;
+    }
+    const size_t actualSize = file.size();
+    file.close();
+    if (actualSize != expectedSize) {
+        error = "field-log size changed before acknowledgement";
+        return false;
+    }
+    uint32_t actualCrc32 = 0;
+    if (!fileCrc32Locked(path, actualCrc32)) {
+        error = "field-log checksum failed";
+        return false;
+    }
+    if (actualCrc32 != expectedCrc32) {
+        error = "field-log checksum did not match acknowledgement";
+        return false;
+    }
+    if (!LittleFS.remove(path)) {
+        error = "field-log segment could not be released";
+        return false;
+    }
+
+    JsonDocument document;
+    document["released"] = fileName;
+    document["sizeBytes"] = static_cast<uint64_t>(actualSize);
+    document["crc32"] = crc32Text(actualCrc32);
+    serializeJson(document, outputJson);
+    return true;
 }
 
 bool heltecFieldLoggerIsActive() {
