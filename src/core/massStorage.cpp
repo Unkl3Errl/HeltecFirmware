@@ -1,5 +1,5 @@
 #include "massStorage.h"
-#if defined(SOC_USB_OTG_SUPPORTED)
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
 #include "core/display.h"
 #include <USB.h>
 bool MassStorage::shouldStop = false;

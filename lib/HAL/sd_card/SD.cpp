@@ -1,4 +1,4 @@
-#ifndef USE_SD_MMC
+#if !defined(HELTEC_ANDROID_STORAGE) && !defined(USE_SD_MMC)
 #include "../SD.h"
 #include "FS.h"
 #include "ff.h"

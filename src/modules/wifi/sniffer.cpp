@@ -28,6 +28,7 @@
 
 #include "FS.h"
 #include "core/display.h"
+#include "core/android_storage.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/webInterface.h"
@@ -277,6 +278,7 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
 
     String sanitizedSsid = sanitizeSsid(ssidLabel);
     String filePath = buildHandshakePath(apAddr, sanitizedSsid.c_str());
+    AndroidStorageActiveGuard storageGuard(filePath, &Fs == &SD);
 
     // Vérifier si le fichier existe déjà
     bool fichierExiste = handshakeFileExists(filePath);
@@ -586,6 +588,7 @@ static void openDeauthFile(FS &Fs) {
     if (lockFileMutex(pdMS_TO_TICKS(200))) {
         _deauth_file = Fs.open(deauthFilename, FILE_WRITE);
         deauthFileOpen = _deauth_file && writeHeader(_deauth_file);
+        if (deauthFileOpen && activeFs == &SD) androidStorageMarkActive(deauthFilename);
         unlockFileMutex();
         if (!deauthFileOpen) { Serial.println("Fail opening deauth capture file"); }
     }
@@ -597,6 +600,7 @@ static void closeRawFile() {
             _pcap_file.flush();
             _pcap_file.close();
         }
+        if (activeFs == &SD) androidStorageMarkClosed(filename);
         rawFileOpen = false;
         unlockFileMutex();
     }
@@ -608,6 +612,7 @@ static void closeDeauthFile() {
             _deauth_file.flush();
             _deauth_file.close();
         }
+        if (activeFs == &SD) androidStorageMarkClosed(deauthFilename);
         deauthFileOpen = false;
         unlockFileMutex();
     }
@@ -875,6 +880,7 @@ void openFile(FS &Fs) {
     if (lockFileMutex(pdMS_TO_TICKS(200))) {
         _pcap_file = Fs.open(filename, FILE_WRITE);
         rawFileOpen = _pcap_file && writeHeader(_pcap_file);
+        if (rawFileOpen && activeFs == &SD) androidStorageMarkActive(filename);
         unlockFileMutex();
         if (!rawFileOpen) { Serial.println("Fail opening the file"); }
     }

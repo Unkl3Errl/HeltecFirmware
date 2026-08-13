@@ -37,6 +37,7 @@ private:
     HardwareSerial GPSserial = HardwareSerial(2);
     int gpsCoordCount = 0;
     bool rxPinReleased = false;
+    bool androidStorageTracked = false;
 
     /////////////////////////////////////////////////////////////////////////////////////
     // Setup

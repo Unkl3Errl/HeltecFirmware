@@ -2,7 +2,7 @@
 #define __MASS_STORAGE_H__
 
 #include <globals.h>
-#if defined(SOC_USB_OTG_SUPPORTED)
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
 #include <USBMSC.h>
 
 class MassStorage {

@@ -7,6 +7,7 @@
  */
 
 #include "gps_tracker.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
@@ -196,18 +197,41 @@ void GPSTracker::add_initial_file_data(File file) {
 }
 
 void GPSTracker::add_final_file_data() {
+    const String path = filename == "" ? "" : "/BruceGPS/" + filename;
     FS *fs;
-    if (!getFsStorage(fs)) return;
-    if (filename == "" || !(*fs).exists("/BruceGPS/" + filename)) return;
+    if (!getFsStorage(fs)) {
+        if (androidStorageTracked) {
+            androidStorageMarkClosed(path);
+            androidStorageTracked = false;
+        }
+        return;
+    }
+    if (filename == "" || !(*fs).exists(path)) {
+        if (androidStorageTracked) {
+            androidStorageMarkClosed(path);
+            androidStorageTracked = false;
+        }
+        return;
+    }
 
-    File file = (*fs).open("/BruceGPS/" + filename, FILE_APPEND);
+    File file = (*fs).open(path, FILE_APPEND);
 
-    if (!file) return;
+    if (!file) {
+        if (androidStorageTracked) {
+            androidStorageMarkClosed(path);
+            androidStorageTracked = false;
+        }
+        return;
+    }
     file.println("    </trkseg>");
     file.println("  </trk>");
     file.println("</gpx>");
 
     file.close();
+    if (androidStorageTracked) {
+        androidStorageMarkClosed(path);
+        androidStorageTracked = false;
+    }
 }
 
 void GPSTracker::add_coord() {
@@ -220,13 +244,23 @@ void GPSTracker::add_coord() {
 
     if (filename == "") create_filename();
 
+    const String path = "/BruceGPS/" + filename;
+    if (fs == &SD && !androidStorageTracked) {
+        androidStorageMarkActive(path);
+        androidStorageTracked = true;
+    }
+
     if (!(*fs).exists("/BruceGPS")) (*fs).mkdir("/BruceGPS");
 
     bool is_new_file = false;
-    if (!(*fs).exists("/BruceGPS/" + filename)) is_new_file = true;
-    File file = (*fs).open("/BruceGPS/" + filename, is_new_file ? FILE_WRITE : FILE_APPEND);
+    if (!(*fs).exists(path)) is_new_file = true;
+    File file = (*fs).open(path, is_new_file ? FILE_WRITE : FILE_APPEND);
 
     if (!file) {
+        if (androidStorageTracked) {
+            androidStorageMarkClosed(path);
+            androidStorageTracked = false;
+        }
         padprintln("Failed to open file for writing");
         returnToMenu = true;
         return;

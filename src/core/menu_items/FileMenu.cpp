@@ -26,7 +26,7 @@ void FileMenu::optionsMenu() {
     }});
 #endif
 
-#if defined(SOC_USB_OTG_SUPPORTED)
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
     options.push_back({"Mass Storage", [=]() { MassStorage(); }});
 #endif
     addOptionToMainMenu();

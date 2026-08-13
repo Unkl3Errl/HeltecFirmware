@@ -8,6 +8,7 @@
 #include <libssh/libssh.h>
 
 #include "core/display.h"
+#include "core/android_storage.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
 #include "core/wifi/wifi_common.h"
@@ -114,12 +115,14 @@ String sanitizeSessionLogComponent(String value) {
 }
 
 void closeSessionLogUnlocked() {
+    const String closingPath = sessionLogPath;
     if (sessionLogFile) {
         sessionLogFile.flush();
         sessionLogFile.close();
     }
     sessionLogEnabled = false;
     sessionLogPath = "";
+    if (!closingPath.isEmpty()) androidStorageMarkClosed(closingPath);
 }
 
 void appendSessionLogUnlocked(const char *data, size_t len) {
@@ -165,6 +168,7 @@ void startSessionLog(ClientProtocol protocol) {
 
             sessionLogEnabled = true;
             sessionLogPath = candidate;
+            androidStorageMarkActive(sessionLogPath);
 
             String header = "=== Bruce Terminal Session ===\n";
             header += "Protocol: " + String(getProtocolName(protocol)) + "\n";
