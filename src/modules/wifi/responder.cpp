@@ -9,6 +9,7 @@ https://github.com/7h30th3r0n3/Evil-M5Project
 #ifndef LITE_VERSION
 #include "responder.h"
 #include "clients.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/utils.h"
@@ -284,7 +285,14 @@ void extractAndPrintHash(uint8_t *pkt, uint32_t smbLength, uint8_t *ntlm) {
     Serial.println(finalHash);
     Serial.println(F("------------------------------------"));
 
-    // 8. Save sur SD
+    // 8. Save to the selected storage. The target board always uses its
+    // internal Android spool; other boards retain the normal SD/LittleFS fallback.
+#ifdef HELTEC_ANDROID_STORAGE
+    const String outputPath = "/BruceResponder/ntlm_hashes.txt";
+    if (!SD.exists("/BruceResponder")) SD.mkdir("/BruceResponder");
+    AndroidStorageActiveGuard storageGuard(outputPath);
+    File file = SD.open(outputPath, FILE_APPEND);
+#else
     FS *fs;
     if (setupSdCard()) fs = &SD;
     else {
@@ -293,6 +301,7 @@ void extractAndPrintHash(uint8_t *pkt, uint32_t smbLength, uint8_t *ntlm) {
     }
     if (!fs->exists("/BruceResponder")) fs->mkdir("/BruceResponder");
     File file = fs->open("/BruceResponder/ntlm_hashes.txt", FILE_APPEND);
+#endif
     if (file) {
         file.println(finalHash);
         file.close();

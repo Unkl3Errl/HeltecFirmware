@@ -4,6 +4,9 @@
 #include "freertos/task.h"
 #include "utils.h"
 #include <globals.h>
+#ifdef HELTEC_ANDROID_STORAGE
+#include "android_storage.h"
+#endif
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
 #include "field_logger.h"
 #include <ArduinoJson.h>
@@ -112,7 +115,7 @@ void writeBridgeResponse(const String &id, bool ok, const String &payload) {
     serialDevice->println(payload);
 }
 
-void writeBridgeError(const String &id, const char *message) {
+void writeBridgeError(const String &id, const String &message) {
     JsonDocument document;
     document["error"] = message;
     String output;
@@ -142,6 +145,67 @@ bool handleHeltecBridge(const String &line) {
 
     if (action == "logger-status") {
         writeBridgeResponse(id, true, heltecFieldLoggerStatusJson());
+        return true;
+    }
+    if (action == "logger-files") {
+        writeBridgeResponse(id, true, heltecFieldLoggerFilesJson());
+        return true;
+    }
+    if (action == "logger-read") {
+        String name;
+        String value;
+        uint64_t offset = 0;
+        uint64_t length = 0;
+        if (
+            !bridgeFormValue(form, "name", name) ||
+            !bridgeFormValue(form, "offset", value) || !bridgeUnsigned64(value, offset) ||
+            !bridgeFormValue(form, "length", value) || !bridgeUnsigned64(value, length) ||
+            offset > SIZE_MAX || length > SIZE_MAX
+        ) {
+            writeBridgeError(id, "invalid field-log read request");
+            return true;
+        }
+        String output;
+        String error;
+        if (!heltecFieldLoggerReadArchiveChunk(name, offset, length, output, error)) {
+            writeBridgeError(id, error);
+        } else {
+            writeBridgeResponse(id, true, output);
+        }
+        return true;
+    }
+    if (action == "logger-ack") {
+        String name;
+        String value;
+        uint64_t size = 0;
+        uint32_t crc32 = 0;
+        bool crcValid = false;
+        if (bridgeFormValue(form, "crc32", value) && value.length() == 8) {
+            crcValid = true;
+            for (size_t index = 0; index < value.length(); index++) {
+                const int nibble = hexNibble(value[index]);
+                if (nibble < 0) {
+                    crcValid = false;
+                    break;
+                }
+                crc32 = (crc32 << 4) | static_cast<uint32_t>(nibble);
+            }
+        }
+        if (
+            !bridgeFormValue(form, "name", name) ||
+            !bridgeFormValue(form, "size", value) || !bridgeUnsigned64(value, size) ||
+            size > SIZE_MAX || !crcValid
+        ) {
+            writeBridgeError(id, "invalid field-log acknowledgement");
+            return true;
+        }
+        String output;
+        String error;
+        if (!heltecFieldLoggerAcknowledgeArchive(name, size, crc32, output, error)) {
+            writeBridgeError(id, error);
+        } else {
+            writeBridgeResponse(id, true, output);
+        }
         return true;
     }
     if (action == "logger-stop") {
@@ -318,6 +382,12 @@ void handleSerialCommands(SerialCli &serialCli) {
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     cmd_str.trim();
     if (handleHeltecBridge(cmd_str)) {
+        serialDevice->print("# ");
+        return;
+    }
+#endif
+#ifdef HELTEC_ANDROID_STORAGE
+    if (handleAndroidStorageCommand(cmd_str)) {
         serialDevice->print("# ");
         return;
     }

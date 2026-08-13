@@ -7,6 +7,7 @@
  */
 
 #include "wardriving.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
@@ -240,13 +241,17 @@ void Wardriving::scanWiFiBLE() {
 
     if (filename == "") create_filename();
 
+    const String outputPath = "/BruceWardriving/" + filename;
+    if (fs == &SD) androidStorageMarkActive(outputPath);
+
     if (!(*fs).exists("/BruceWardriving")) (*fs).mkdir("/BruceWardriving");
 
     bool is_new_file = false;
-    if (!(*fs).exists("/BruceWardriving/" + filename)) is_new_file = true;
-    File file = (*fs).open("/BruceWardriving/" + filename, is_new_file ? FILE_WRITE : FILE_APPEND);
+    if (!(*fs).exists(outputPath)) is_new_file = true;
+    File file = (*fs).open(outputPath, is_new_file ? FILE_WRITE : FILE_APPEND);
 
     if (!file) {
+        androidStorageMarkClosed(outputPath);
         padprintln("Failed to open file for writing");
         displayError("Failed to open file for writing", true);
         returnToMenu = true;
@@ -332,6 +337,7 @@ void Wardriving::scanWiFiBLE() {
             if (!BLEDevice::init("")) {
                 Serial.println(" Failed to init BLE");
                 file.close();
+                androidStorageMarkClosed(outputPath);
                 vTaskDelay(500 / portTICK_PERIOD_MS);
                 return;
             }
@@ -442,6 +448,7 @@ scan_summary:
     }
 
     file.close();
+    androidStorageMarkClosed(outputPath);
 }
 
 void Wardriving::enforceRegisteredMACLimit() {

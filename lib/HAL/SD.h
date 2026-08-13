@@ -1,5 +1,18 @@
 #ifndef __SDM__H
 #define __SDM__H
+
+#ifdef HELTEC_ANDROID_STORAGE
+
+#include <FFat.h>
+
+using namespace fs;
+typedef fs::File SDFile;
+typedef fs::F_Fat SDFileSystemClass;
+#define SD FFat
+#define SDFileSystem FFat
+
+#else
+
 #include <FS.h>
 
 // #define USE_SD_MMC // test, delete later
@@ -89,4 +102,5 @@ using namespace fs;
 typedef fs::File SDFile;
 typedef fs::SDFS SDFileSystemClass;
 #define SDFileSystem SD
+#endif // HELTEC_ANDROID_STORAGE
 #endif

@@ -20,11 +20,40 @@
 
 #include <MD5Builder.h>
 #include <algorithm> // for std::sort
+#include <esp_partition.h>
 #include <esp_rom_crc.h>
 
 // SPIClass sdcardSPI;
 String fileToCopy;
 std::vector<FileList> fileList;
+
+#ifdef HELTEC_ANDROID_STORAGE
+namespace {
+constexpr const char *kAndroidStoragePartition = "android";
+
+bool androidStoragePartitionIsBlank() {
+    const esp_partition_t *partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA,
+        ESP_PARTITION_SUBTYPE_DATA_FAT,
+        kAndroidStoragePartition
+    );
+    if (!partition) return false;
+
+    uint8_t buffer[512];
+    for (size_t offset = 0; offset < partition->size; offset += sizeof(buffer)) {
+        const size_t length = std::min<size_t>(
+            sizeof(buffer), static_cast<size_t>(partition->size) - offset
+        );
+        if (esp_partition_read(partition, offset, buffer, length) != ESP_OK) return false;
+        for (size_t index = 0; index < length; ++index) {
+            if (buffer[index] != 0xFF) return false;
+        }
+        if ((offset & 0xFFFF) == 0) delay(0);
+    }
+    return true;
+}
+} // namespace
+#endif
 
 /***************************************************************************************
 ** Function name: setupLittleFS
@@ -50,6 +79,29 @@ void closeLittleFS() {
 ***************************************************************************************/
 bool setupSdCard(uint8_t maxFiles) {
     if (maxFiles < 1) { maxFiles = 1; }
+#ifdef HELTEC_ANDROID_STORAGE
+    if (sdcardMounted) return true;
+    const bool blankPartition = androidStoragePartitionIsBlank();
+    bool mounted = SD.begin(false, "/android", 10, kAndroidStoragePartition);
+    if (!mounted) {
+        if (blankPartition) {
+            char partitionLabel[] = "android";
+            SD.format(FFAT_WIPE_QUICK, partitionLabel);
+            mounted = SD.begin(false, "/android", 10, kAndroidStoragePartition);
+        }
+    }
+    if (!mounted) {
+        Serial.println("Android virtual SD could not be mounted");
+        if (!blankPartition) {
+            Serial.println("Existing virtual SD retained without formatting");
+        }
+        sdcardMounted = false;
+        return false;
+    }
+    Serial.println("Android virtual SD mounted from internal flash");
+    sdcardMounted = true;
+    return true;
+#else
 #ifndef USE_SD_MMC
     if (bruceConfigPins.SDCARD_bus.sck < 0) {
         sdcardMounted = false;
@@ -129,6 +181,7 @@ bool setupSdCard(uint8_t maxFiles) {
         sdcardMounted = true;
         return true;
     }
+#endif
 }
 
 /***************************************************************************************

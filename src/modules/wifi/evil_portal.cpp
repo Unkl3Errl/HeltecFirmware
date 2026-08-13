@@ -1,4 +1,5 @@
 #include "evil_portal.h"
+#include "core/android_storage.h"
 #include "core/config.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -824,13 +825,10 @@ void EvilPortal::saveToCSV(const String &csvLine, bool isAPname) {
 
     if (!fs->exists("/BruceEvilCreds")) fs->mkdir("/BruceEvilCreds");
 
-    File file;
-
-    if (!isAPname) {
-        file = fs->open("/BruceEvilCreds/" + outputFile, FILE_APPEND);
-    } else {
-        file = fs->open("/BruceEvilCreds/" + apName + "_creds.csv", FILE_APPEND);
-    }
+    const String outputPath = !isAPname ? "/BruceEvilCreds/" + outputFile
+                                        : "/BruceEvilCreds/" + apName + "_creds.csv";
+    AndroidStorageActiveGuard storageGuard(outputPath, fs == &SD);
+    File file = fs->open(outputPath, FILE_APPEND);
 
     if (!file) {
         log_i("Error to open file");

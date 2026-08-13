@@ -20,7 +20,7 @@
 #include "modules/rfid/PN532KillerTools.h"
 #include "modules/rfid/pn532ble.h"
 #include "modules/wifi/sniffer.h"
-#ifdef SOC_USB_OTG_SUPPORTED
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
 #include "core/massStorage.h"
 #endif
 
@@ -34,7 +34,7 @@ StartupApp::StartupApp() {
 #endif
     _startupApps["Clock"] = []() { runClockLoop(); };
     _startupApps["Custom SubGHz"] = []() { sendCustomRF(); };
-#if defined(SOC_USB_OTG_SUPPORTED)
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(HELTEC_ANDROID_STORAGE)
     _startupApps["Mass Storage"] = []() { MassStorage(); };
 #endif
     _startupApps["Wardriving"] = []() { Wardriving(true, true); };
