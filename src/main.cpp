@@ -180,7 +180,57 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #include "modules/bjs_interpreter/interpreter.h" // for JavaScript interpreter
 #include "modules/others/audio.h"                // for playAudioFile
 #include "modules/rf/rf_utils.h"                 // for initCC1101once
+#include <esp_system.h>
 #include <Wire.h>
+
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+namespace {
+constexpr uint8_t kBootGuardVextPin = 36;
+
+const char *bootResetReasonName(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "power_on";
+        case ESP_RST_EXT: return "external";
+        case ESP_RST_SW: return "software";
+        case ESP_RST_PANIC: return "panic";
+        case ESP_RST_INT_WDT: return "interrupt_watchdog";
+        case ESP_RST_TASK_WDT: return "task_watchdog";
+        case ESP_RST_WDT: return "watchdog";
+        case ESP_RST_DEEPSLEEP: return "deep_sleep";
+        case ESP_RST_BROWNOUT: return "brownout";
+        case ESP_RST_SDIO: return "sdio";
+        case ESP_RST_UNKNOWN:
+        default: return "unknown";
+    }
+}
+
+void runBootPowerGuard() {
+    const esp_reset_reason_t reason = esp_reset_reason();
+    uint32_t guardMs = 0;
+    if (reason == ESP_RST_BROWNOUT) guardMs = 2500;
+    else if (reason == ESP_RST_POWERON) guardMs = 1200;
+
+    if (guardMs > 0) {
+        // Hold the external rail and GPS off while a freshly recharged battery
+        // recovers, then let normal board initialization turn them on in order.
+        pinMode(kBootGuardVextPin, OUTPUT);
+        digitalWrite(kBootGuardVextPin, HIGH);
+#if defined(GPS_POWER_PIN) && GPS_POWER_PIN >= 0
+        pinMode(GPS_POWER_PIN, OUTPUT);
+        digitalWrite(GPS_POWER_PIN, GPS_POWER_ACTIVE == LOW ? HIGH : LOW);
+#endif
+        delay(guardMs);
+    }
+    Serial.printf(
+        "[BOOT] reset=%s (%d), power guard=%lu ms\n",
+        bootResetReasonName(reason),
+        static_cast<int>(reason),
+        static_cast<unsigned long>(guardMs)
+    );
+    Serial.flush();
+}
+} // namespace
+#endif
 
 /*********************************************************************
  **  Function: begin_storage
@@ -450,6 +500,10 @@ void setup() {
         SAFE_STACK_BUFFER_SIZE / 4
     ); // Must be invoked before Serial.begin(). Default is 256 chars
     Serial.begin(115200);
+
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+    runBootPowerGuard();
+#endif
 
     log_d("Total heap: %d", ESP.getHeapSize());
     log_d("Free heap: %d", ESP.getFreeHeap());
