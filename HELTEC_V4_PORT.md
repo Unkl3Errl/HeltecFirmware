@@ -11,6 +11,8 @@ upstream branch on July 18, 2026.
 
 - Native USB serial and USB HID
 - Wi-Fi and BLE
+- Automatically started phone-facing BLE API for persistent Android command and
+  virtual-storage sessions after reset or battery recovery
 - 16 MB flash and 2 MB PSRAM configuration
 - Active-low Vext control on GPIO 36
 - SX1262 SPI pins: SCK 9, MISO 11, MOSI 10, CS 8, reset 12, busy 13, DIO1 14

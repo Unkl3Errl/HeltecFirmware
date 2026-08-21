@@ -47,6 +47,14 @@ class OledMenuContractTest(unittest.TestCase):
             MAIN_SOURCE.index("xTaskCreate(\n        taskInputHandler"),
         )
 
+    def test_phone_ble_fallback_starts_on_every_boot(self):
+        self.assertIn('heltecV4DrawBootStage("Starting Bluetooth");', MAIN_SOURCE)
+        self.assertIn("enableBLEAPI();", MAIN_SOURCE)
+        self.assertLess(
+            MAIN_SOURCE.index("    enableBLEAPI();"),
+            MAIN_SOURCE.index("    heltecFieldLoggerBegin();"),
+        )
+
     def test_button_polling_has_a_dedicated_task(self):
         self.assertIn('xTaskCreate(oledInputTask, "HeltecOledInput"', SOURCE)
         task_body = SOURCE[SOURCE.index("void oledInputTask(void *parameter) {") :]

@@ -21,6 +21,10 @@ The customized Heltec WiFi LoRa 32 V4 build adds:
   observations as NDJSON, resumes after a
   reset when enabled, and exposes authenticated status and downloads in the
   WebUI and Android app.
+- A phone-facing BLE command and virtual-storage link that starts automatically
+  after every boot, remains available with the screen off, and lets the Android
+  companion drain this board independently while other firmware devices are
+  connected.
 - SX1262 receive control with an eight-packet history and JSON export.
 - Constrained US915 WebUI transmission: 902–928 MHz, fixed 2 dBm, printable
   payloads up to 64 bytes, per-packet confirmation, and cooldown.
