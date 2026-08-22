@@ -162,7 +162,16 @@ jobs:
       - name: Run Compile
         run: |
           set -o pipefail
-          platformio run -e ${{ matrix.board.env }} | tee build-${{ matrix.board.env }}.log
+          for attempt in 1 2 3; do
+            if platformio run -e ${{ matrix.board.env }} | tee build-${{ matrix.board.env }}.log; then
+              exit 0
+            fi
+            if [[ "$attempt" -eq 3 ]]; then
+              exit 1
+            fi
+            echo "PlatformIO attempt $attempt failed; retrying transient dependency downloads"
+            sleep $((attempt * 15))
+          done
 
       - name: Build summary
         run: |
@@ -185,6 +194,9 @@ jobs:
     name: Update Placeholders
     runs-on: ubuntu-latest
     environment: github_release
+    permissions:
+      actions: write
+      contents: write
     needs: compile_sketch
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') || github.ref_type == 'tag'
     steps:
