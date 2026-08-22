@@ -19,6 +19,9 @@ StaticSemaphore_t activePathsMutexBuffer;
 SemaphoreHandle_t activePathsMutex = nullptr;
 portMUX_TYPE activePathsInitMux = portMUX_INITIALIZER_UNLOCKED;
 std::vector<ActivePath> activePaths;
+uint64_t androidHostTotalBytes = 0;
+uint64_t androidHostFreeBytes = 0;
+bool androidHostCapacityValid = false;
 
 bool lockActivePaths() {
     if (!activePathsMutex) {
@@ -154,6 +157,15 @@ bool unsignedNumber(const String &value, size_t &output) {
         if (!isDigit(value[i])) return false;
     }
     output = static_cast<size_t>(strtoull(value.c_str(), nullptr, 10));
+    return true;
+}
+
+bool unsignedNumber64(const String &value, uint64_t &output) {
+    if (value.length() == 0) return false;
+    for (size_t i = 0; i < value.length(); ++i) {
+        if (!isDigit(value[i])) return false;
+    }
+    output = strtoull(value.c_str(), nullptr, 10);
     return true;
 }
 
@@ -364,11 +376,36 @@ bool handleAndroidStorageCommand(const String &line) {
     if (!ensureStorage()) return true;
 
     const String &operation = args[1];
-    if (operation == "status") {
+    if (operation == "host" && count == 4) {
+        uint64_t total = 0;
+        uint64_t free = 0;
+        if (!unsignedNumber64(args[2], total) || !unsignedNumber64(args[3], free) ||
+            total == 0 || free > total) {
+            storageError("invalid_host_capacity");
+        } else {
+            androidHostTotalBytes = total;
+            androidHostFreeBytes = free;
+            androidHostCapacityValid = true;
+            serialDevice->println("SD:HOST:total=" + String(total));
+            serialDevice->println("SD:HOST:free=" + String(free));
+            serialDevice->println("SD:OK:host-capacity");
+        }
+    } else if (operation == "status") {
         serialDevice->println("SD:STATUS:mounted=true");
         serialDevice->println("SD:STATUS:type=virtual");
-        serialDevice->println("SD:STATUS:total=" + String(SD.totalBytes()));
-        serialDevice->println("SD:STATUS:free=" + String(SD.freeBytes()));
+        serialDevice->println(
+            String("SD:STATUS:backing=") + (androidHostCapacityValid ? "android" : "spool")
+        );
+        serialDevice->println(
+            "SD:STATUS:total=" +
+            String(androidHostCapacityValid ? androidHostTotalBytes : SD.totalBytes())
+        );
+        serialDevice->println(
+            "SD:STATUS:free=" +
+            String(androidHostCapacityValid ? androidHostFreeBytes : SD.freeBytes())
+        );
+        serialDevice->println("SD:STATUS:spool_total=" + String(SD.totalBytes()));
+        serialDevice->println("SD:STATUS:spool_free=" + String(SD.freeBytes()));
         serialDevice->println("SD:OK");
     } else if (operation == "list") {
         listStorage(count >= 3 ? args[2] : "/");

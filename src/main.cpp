@@ -594,6 +594,13 @@ void setup() {
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     extern void heltecFieldLoggerBegin();
     extern void heltecV4BeginStandaloneMenu();
+    heltecV4DrawBootStage("Starting Bluetooth");
+#if !defined(LITE_VERSION)
+    // The Android companion treats BLE as a persistent cable-loss fallback.
+    // Start the existing Bruce BLE API on every V4 boot so a discharged or
+    // reset board can reconnect without requiring an on-device menu change.
+    enableBLEAPI();
+#endif
     heltecV4DrawBootStage("Loading field logs");
     heltecFieldLoggerBegin();
     heltecV4DrawBootStage("Starting services");

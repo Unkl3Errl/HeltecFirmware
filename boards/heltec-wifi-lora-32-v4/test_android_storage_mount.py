@@ -27,6 +27,16 @@ class AndroidStorageMountContractTest(unittest.TestCase):
         ):
             self.assertIn(expected, STORAGE_SOURCE)
 
+    def test_android_capacity_is_reported_separately_from_the_spool(self):
+        for expected in (
+            'operation == "host"',
+            'SD:STATUS:backing=',
+            'SD:STATUS:spool_total=',
+            'SD:STATUS:spool_free=',
+            'androidHostCapacityValid ? androidHostTotalBytes',
+        ):
+            self.assertIn(expected, STORAGE_SOURCE)
+
 
 if __name__ == "__main__":
     unittest.main()
