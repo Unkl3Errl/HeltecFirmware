@@ -316,8 +316,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow list
-          gh workflow run .github/workflows/deploy.yml --ref WebPage
+          if ! gh api "repos/${GITHUB_REPOSITORY}/branches/WebPage" >/dev/null 2>&1; then
+            echo "::notice::Skipping WebPage deploy: this repository has no WebPage branch."
+            exit 0
+          fi
+          if ! gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy.yml" >/dev/null 2>&1; then
+            echo "::notice::Skipping WebPage deploy: deploy.yml is not registered on the default branch."
+            exit 0
+          fi
+          gh workflow run deploy.yml --ref WebPage
 
   create_release:
     runs-on: ubuntu-latest
