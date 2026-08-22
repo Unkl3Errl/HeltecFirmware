@@ -1,6 +1,7 @@
 #ifndef BLE_API_HPP
 #define BLE_API_HPP
 #if !defined(LITE_VERSION)
+#include "MultiplexSerialDevice.h"
 #include "services/BLESerialService.h"
 #include "services/BatteryService.hpp"
 
@@ -20,6 +21,7 @@ private:
     uint32_t totalConnections = 0;
     BatteryService battery_service;
     BLESerialService serial_service;
+    MultiplexSerialDevice serial_multiplexer;
 };
 #endif
 #endif // BLE_API_HPP
