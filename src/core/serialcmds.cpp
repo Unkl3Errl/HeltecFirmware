@@ -378,7 +378,7 @@ void handleSerialCommands(SerialCli &serialCli) {
     if (!serialDevice->available()) return;
 
     String cmd_str = serialDevice->readStringUntil('\n');
-    Serial.println("COMMAND: " + cmd_str);
+    serialDevice->println("COMMAND: " + cmd_str);
 #ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
     cmd_str.trim();
     if (handleHeltecBridge(cmd_str)) {
