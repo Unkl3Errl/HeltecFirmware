@@ -30,7 +30,8 @@ void BLE_API::setup() {
 
     battery_service.setup(pServer);
     serial_service.setup(pServer);
-    serialDevice = &serial_service;
+    serial_multiplexer.setDevices(&USBserial, &serial_service);
+    serialDevice = &serial_multiplexer;
 
     BLEAdvertising *pAdvertising = pServer->getAdvertising();
     pAdvertising->enableScanResponse(false); // Save some battery
@@ -54,10 +55,11 @@ bool BLE_API::advertising() const {
 }
 
 void BLE_API::end() {
+    serialDevice = &USBserial;
+    serial_multiplexer.setDevices(&USBserial, nullptr);
     battery_service.end();
     serial_service.end();
     BLEDevice::deinit();
     pServer = nullptr;
-    serialDevice = &USBserial;
 }
 #endif

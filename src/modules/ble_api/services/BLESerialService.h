@@ -3,6 +3,9 @@
 #include "BruceBLEService.hpp"
 
 #include <SerialDevice.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <string>
 
 #define BUFFER_SIZE 128
 
@@ -11,6 +14,12 @@ class BLESerialCallbacks;
 class BLESerialService : public BruceBLEService, public SerialDevice {
     NimBLECharacteristic *serial_char = nullptr;
     BLESerialCallbacks *callbacks = nullptr;
+    SemaphoreHandle_t rxMutex = nullptr;
+    std::string rxBuffer;
+
+    size_t notifyBytes(const uint8_t *data, size_t size);
+    bool takeRxMutex();
+    void giveRxMutex();
 
 public:
     BLESerialService();
@@ -31,5 +40,6 @@ public:
     String readStringUntil(char terminator) override;
     int available() override;
     void setMTU(uint16_t mtu);
+    void receive(const std::string &value);
 };
 #endif
