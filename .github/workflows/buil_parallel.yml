@@ -24,6 +24,9 @@ on:
         - "**.csv"
     tags:
       - "*"
+      # Mobile tags publish a hardware-verified WiFi LoRa 32 V4 image through
+      # heltec-v4.yml. Do not let this all-board workflow replace that asset.
+      - "!v*.*.*-mobile.*"
   workflow_dispatch:
 
 jobs:
