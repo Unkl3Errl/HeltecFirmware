@@ -161,12 +161,12 @@ uint32_t helpCallback(cmd *c) {
 
     serialDevice->println("\nRF Commands:");
     serialDevice->println(
-        "  subghz rx <timeout>       - Read an RF signal and print the dump on serialDevice-> (alias: rf rx)"
+        "  subghz rx [timeout_seconds] [-frequency <MHz|Hz>] - Receive decoded external OOK RF; runs "
+        "until stopscan when timeout is omitted (alias: rf rx)"
     );
     serialDevice->println(
-        "  subghz rx raw <timeout>   - Read an RF signal in RAW mode and print the dump on serialDevice-> "
-        "(alias: "
-        "rf rx raw)"
+        "  subghz rx raw [timeout_seconds] [-frequency <MHz|Hz>] - Receive raw external OOK RF; runs "
+        "until stopscan when timeout is omitted (alias: rf rx raw)"
     );
     serialDevice->println(
         "  subghz tx <decoded_value> <frequency> <te> <count>  - Send a custom decoded RF signal. (alias: rf "
