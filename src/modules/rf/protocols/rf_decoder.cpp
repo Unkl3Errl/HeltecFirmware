@@ -11,6 +11,7 @@
 #include "../rf_utils.h" // setup_rf_rx, find_pulse_index, crc64_ecma, RMT defines
 #include "rf_config.h"   // RF_DBG
 #include "rf_registry.h"
+#include <driver/gpio.h>
 #include <globals.h>
 
 // --- Decode tuning (mirrors the classic OOK receiver) ----------------------
@@ -116,6 +117,8 @@ static void IRAM_ATTR rf_m5_edge_isr() {
     portEXIT_CRITICAL_ISR(&rf_m5_mux);
 }
 
+static void IRAM_ATTR rf_m5_edge_isr_arg(void *) { rf_m5_edge_isr(); }
+
 void RfRxSession::arm() {
     rmt_receive_config_t cfg = {};
     cfg.signal_range_min_ns = 3000; // 3µs minimum (framework-proven); noise is
@@ -142,7 +145,29 @@ bool RfRxSession::begin() {
         rf_m5_ready_count = 0;
         portEXIT_CRITICAL(&rf_m5_mux);
 
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+        // This board installs ESP-IDF's shared GPIO ISR service during boot so
+        // WebUI-triggered receive sessions never allocate it on AsyncTCP's
+        // small IPC stack. Register directly with that service; calling
+        // Arduino attachInterrupt() here would try to install the service a
+        // second time and emit a misleading ESP_ERR_INVALID_STATE diagnostic.
+        const gpio_num_t rxGpio = static_cast<gpio_num_t>(rf_m5_pin);
+        esp_err_t isrStatus = gpio_set_intr_type(rxGpio, GPIO_INTR_ANYEDGE);
+        if (isrStatus == ESP_OK) isrStatus = gpio_isr_handler_add(rxGpio, rf_m5_edge_isr_arg, nullptr);
+        if (isrStatus == ESP_OK) isrStatus = gpio_intr_enable(rxGpio);
+        if (isrStatus != ESP_OK) {
+            RF_DBG("M5 GPIO RX ISR registration failed: %d", (int)isrStatus);
+            portENTER_CRITICAL(&rf_m5_mux);
+            rf_m5_active = false;
+            rf_m5_pin = -1;
+            portEXIT_CRITICAL(&rf_m5_mux);
+            deinitRfModule();
+            return false;
+        }
+        _m5NativeIsr = true;
+#else
         attachInterrupt(digitalPinToInterrupt(rf_m5_pin), rf_m5_edge_isr, CHANGE);
+#endif
         _m5Isr = true;
         RF_DBG("M5 GPIO RX started on gpio=%d filter=%dus", bruceConfigPins.rfRx, RF_M5_RX_GLITCH_US);
         return true;
@@ -235,7 +260,14 @@ bool RfRxSession::poll(std::vector<int> &durations) {
 
 void RfRxSession::end() {
     if (_m5Isr) {
-        detachInterrupt(digitalPinToInterrupt(rf_m5_pin));
+        if (_m5NativeIsr) {
+            const gpio_num_t rxGpio = static_cast<gpio_num_t>(rf_m5_pin);
+            gpio_intr_disable(rxGpio);
+            gpio_isr_handler_remove(rxGpio);
+            _m5NativeIsr = false;
+        } else {
+            detachInterrupt(digitalPinToInterrupt(rf_m5_pin));
+        }
         portENTER_CRITICAL(&rf_m5_mux);
         rf_m5_active = false;
         rf_m5_count = 0;

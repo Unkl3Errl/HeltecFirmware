@@ -17,27 +17,65 @@
 uint32_t rfRxCallback(cmd *c) {
     Command cmd(c);
 
+    Argument modeArg = cmd.getArgument("mode_or_timeout");
+    Argument timeoutArg = cmd.getArgument("timeout");
     Argument rawArg = cmd.getArgument("raw");
     Argument freqArg = cmd.getArgument("frequency");
-    bool raw = rawArg.isSet();
+    String mode = modeArg.getValue();
+    String timeoutText = timeoutArg.getValue();
     String strFreq = freqArg.getValue();
+    mode.trim();
+    timeoutText.trim();
+    strFreq.trim();
+
+    bool raw = rawArg.isSet();
+    uint32_t timeoutSeconds = 0; // Continuous until stop/stopscan by default.
+
+    String normalizedMode = mode;
+    normalizedMode.toLowerCase();
+    if (normalizedMode == "raw") {
+        raw = true;
+    } else if (normalizedMode == "decoded" || normalizedMode.length() == 0) {
+        // Explicit decoded mode and an omitted mode both use the normal decoder.
+    } else {
+        char *end = nullptr;
+        const unsigned long parsed = strtoul(normalizedMode.c_str(), &end, 10);
+        if (end && *end == '\0') {
+            // Keep the previously undocumented `rf rx <frequency_hz>` form
+            // working while making the documented small positional value a
+            // timeout in seconds.
+            if (parsed > 10000UL) strFreq = normalizedMode;
+            else timeoutSeconds = parsed;
+        } else {
+            serialDevice->println("RF RX mode must be 'raw', 'decoded', or a timeout in seconds");
+            return false;
+        }
+    }
+
+    if (timeoutText.length() > 0) {
+        char *end = nullptr;
+        const unsigned long parsed = strtoul(timeoutText.c_str(), &end, 10);
+        if (!end || *end != '\0' || parsed == 0 || parsed > 3600UL) {
+            serialDevice->println("RF RX timeout must be between 1 and 3600 seconds");
+            return false;
+        }
+        timeoutSeconds = parsed;
+    }
 
     float frequency = strFreq.toFloat();
-    frequency /= 1000000; // passed as a long int (e.g. 433920000)
-
-    // serialDevice->print("frequency: ");
-    // serialDevice->println(frequency);
+    if (frequency > 10000.0f) frequency /= 1000000.0f; // Also accept Hz, e.g. 433920000.
+    if (frequency <= 0.0f) frequency = bruceConfigPins.rfFreq;
 
     String r = "";
     if (raw) {
-        r = rfReceiveSignal(frequency, 10, true, true); // raw mode, headless (Serial only)
+        r = rfReceiveSignal(frequency, timeoutSeconds, true, true); // raw, headless (Serial only)
     } else {
-        r = rfReceiveSignal(frequency, 10, false, true); // decoded mode, headless (Serial only)
+        r = rfReceiveSignal(frequency, timeoutSeconds, false, true); // decoded, headless (Serial only)
     }
 
-    if (r.length() == 0) return false;
-
-    serialDevice->println(r);
+    if (r.length() > 0) serialDevice->println(r);
+    // A user stop or a bounded timeout is a successfully completed receive
+    // session, not a command parser failure.
     return true;
 }
 
@@ -365,7 +403,9 @@ uint32_t rfSendCallback(cmd *c) {
 
 void createRfRxCommand(Command *rfCmd) {
     Command cmd = rfCmd->addCommand("rx", rfRxCallback);
-    cmd.addPosArg("frequency", String(bruceConfigPins.rfFreq).c_str());
+    cmd.addPosArg("mode_or_timeout", "");
+    cmd.addPosArg("timeout", "");
+    cmd.addArg("frequency", String(bruceConfigPins.rfFreq).c_str());
     cmd.addFlagArg("raw");
 }
 

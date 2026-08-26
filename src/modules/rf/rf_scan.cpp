@@ -26,6 +26,56 @@ static void rf_clear_nav_state() {
     forceMenuOption = -1;
 }
 
+static String rfConsoleInput;
+
+static bool pollRfConsoleStop() {
+    if (!serialDevice) return false;
+
+    while (serialDevice->available() > 0) {
+        const int value = serialDevice->read();
+        if (value < 0) break;
+        const char input = static_cast<char>(value);
+        if (input == '\r') continue;
+        if (input != '\n') {
+            if (rfConsoleInput.length() < 511) {
+                rfConsoleInput += input;
+            } else {
+                rfConsoleInput = "";
+                serialDevice->println("[RF RX] command too long; input discarded");
+            }
+            continue;
+        }
+
+        String command = rfConsoleInput;
+        rfConsoleInput = "";
+        command.trim();
+        if (command.length() == 0) continue;
+
+        String normalized = command;
+        normalized.toLowerCase();
+        if (normalized == "stop" || normalized == "stopall" || normalized == "stopscan" ||
+            normalized == "rf stop" || normalized == "rf rx stop" || normalized == "subghz stop" ||
+            normalized == "subghz rx stop" || normalized == "esc") {
+            serialDevice->println("[RF RX] console stop requested");
+            return true;
+        }
+
+        if (normalized.startsWith("sd ")) {
+            serialDevice->println("SD:ERR:busy:rf-rx");
+        } else if (normalized.startsWith("@heltec-bridge ")) {
+            const int idStart = command.indexOf(' ') + 1;
+            const int idEnd = command.indexOf(' ', idStart);
+            const String id = idStart > 0 && idEnd > idStart ? command.substring(idStart, idEnd) : "0";
+            serialDevice->println(
+                String("@HELTEC-BRIDGE ") + id + " ERROR {\"error\":\"RF RX active; send stopscan\"}"
+            );
+        } else {
+            serialDevice->println("[RF RX] active; send stopscan to return to the console");
+        }
+    }
+    return false;
+}
+
 static bool rf_m5_raw_is_plausible(bool hasCrc, int rawBits, int rawTe) {
     return hasCrc && rawBits >= RF_M5_RAW_MIN_BITS && rawTe >= RF_M5_RAW_MIN_TE_US;
 }
@@ -812,6 +862,12 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
 
     if (!frequency) frequency = bruceConfigPins.rfFreq; // default from config
 
+    if (headless) {
+        rf_clear_nav_state();
+        returnToMenu = false;
+        rfConsoleInput = "";
+    }
+
     char hexString[64] = {0};
 
     if (!headless) {
@@ -826,10 +882,31 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
     RfRxSession rx;
     if (!rx.begin()) {
         deinitRfModule();
+        if (headless) serialDevice->println("[RF RX] failed to start receiver");
         return "";
     }
 
+    const uint32_t startedAt = millis();
+    const uint32_t timeoutMs = max_loops > 0 ? static_cast<uint32_t>(max_loops) * 1000U : 0U;
+    if (headless) {
+        String status = "[RF RX] listening on external receiver GPIO " + String(bruceConfigPins.rfRx) +
+                        " at " + String(frequency, 3) + " MHz (" + (raw ? "raw" : "decoded") + ")";
+        if (timeoutMs > 0) status += " for " + String(max_loops) + " seconds";
+        else status += "; send stopscan to stop";
+#ifdef ARDUINO_HELTEC_WIFI_LORA_32_V4
+        status += ". Onboard SX1262 reception uses LoRa, not rf rx";
+#endif
+        serialDevice->println(status);
+    }
+
     while (!check(EscPress)) {
+        if (headless && pollRfConsoleStop()) {
+            rx.end();
+            deinitRfModule();
+            serialDevice->println("[RF RX] stopped");
+            return "";
+        }
+
         std::vector<int> durations;
         if (rx.poll(durations)) {
             // In decode mode try KeeLoq, then the registry; raw mode skips decoding.
@@ -896,28 +973,27 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             }
             rx.end();
             deinitRfModule();
+            if (headless) serialDevice->println("[RF RX] stopped after capture");
             return subfile_out;
         }
-        if (max_loops > 0) {
-            // headless mode, quit if nothing received after max_loops
-            vTaskDelay(1000 / portTICK_PERIOD_MS); // wait first, THEN check
-            max_loops -= 1;
-            if (max_loops == 0) {
-                // Use sentinel -1: loop runs one more iteration to catch signals
-                // that arrived during vTaskDelay before giving up
-                max_loops = -1;
+        if (timeoutMs > 0 && static_cast<uint32_t>(millis() - startedAt) >= timeoutMs) {
+            if (headless) {
+                serialDevice->println("[RF RX] timeout after " + String(max_loops) + " seconds");
+            } else {
+                Serial.println("timeout");
             }
-        } else if (max_loops == -1) {
-            // Final check already done in this iteration - truly timed out
-            Serial.println("timeout");
             rx.end();
             deinitRfModule();
+            if (headless) serialDevice->println("[RF RX] stopped");
             return "";
         }
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
     rx.end();
     deinitRfModule();
+
+    if (headless) serialDevice->println("[RF RX] stopped");
 
     return "";
 }

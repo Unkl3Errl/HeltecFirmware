@@ -178,6 +178,7 @@ std::vector<RfCodes> recent_rfcodes;
 bool rmtInstalled = true;
 static bool cc1101_spi_ready = false;
 static uint8_t cc1101_mode_hint = 0;
+static bool single_pin_tx_active = false;
 
 bool RfCodes::keeloq_check_decrypt(uint32_t decrypt) {
     uint16_t end_serial = serial & 0xFF;
@@ -332,9 +333,11 @@ bool initRfModule(String mode, float frequency) {
             gpio_reset_pin((gpio_num_t)bruceConfigPins.rfTx);
             pinMode(bruceConfigPins.rfTx, OUTPUT);
             digitalWrite(bruceConfigPins.rfTx, LOW);
+            single_pin_tx_active = true;
 
         } else if (mode == "rx") {
             // Rx Mode
+            single_pin_tx_active = false;
             gsetRfRxPin(false);
             if (bruceConfigPins.SDCARD_bus.checkConflict(bruceConfigPins.rfRx)) sdcardSPI.end();
             gpio_reset_pin((gpio_num_t)bruceConfigPins.rfRx);
@@ -355,7 +358,13 @@ void deinitRfModule() {
         digitalWrite(bruceConfigPins.CC1101_bus.cs, HIGH);
         ioExpander.turnPinOnOff(IO_EXP_CC_RX, LOW);
         ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
-    } else digitalWrite(bruceConfigPins.rfTx, LED_OFF);
+    } else if (single_pin_tx_active) {
+        // RX only configures rfRx. Do not write rfTx during RX cleanup: on
+        // boards such as the Heltec V4 that pin is otherwise unconfigured and
+        // the ESP-IDF GPIO driver reports an error after every receive session.
+        digitalWrite(bruceConfigPins.rfTx, LED_OFF);
+        single_pin_tx_active = false;
+    }
 }
 
 void initCC1101once(SPIClass *SSPI) {
