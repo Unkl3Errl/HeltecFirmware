@@ -200,6 +200,56 @@ static void registerBeacon(const uint8_t *apAddr);
 static void cleanupStaleBeacons();
 static size_t countActiveBeaconsOnChannel(uint8_t channel);
 static std::vector<String> recentSsidsOnChannel(uint8_t channel, size_t maxItems = 5);
+static bool pollSnifferConsoleStop();
+
+static String snifferConsoleInput;
+
+static bool pollSnifferConsoleStop() {
+    if (!serialDevice) return false;
+
+    while (serialDevice->available() > 0) {
+        const int value = serialDevice->read();
+        if (value < 0) break;
+        const char input = static_cast<char>(value);
+        if (input == '\r') continue;
+        if (input != '\n') {
+            if (snifferConsoleInput.length() < 511) {
+                snifferConsoleInput += input;
+            } else {
+                snifferConsoleInput = "";
+                serialDevice->println("[SNIFFER] command too long; input discarded");
+            }
+            continue;
+        }
+
+        String command = snifferConsoleInput;
+        snifferConsoleInput = "";
+        command.trim();
+        if (command.length() == 0) continue;
+
+        String normalized = command;
+        normalized.toLowerCase();
+        if (normalized == "stop" || normalized == "stopall" || normalized == "stopscan" ||
+            normalized == "sniffer stop" || normalized == "esc") {
+            serialDevice->println("[SNIFFER] console stop requested");
+            return true;
+        }
+
+        if (normalized.startsWith("sd ")) {
+            serialDevice->println("SD:ERR:busy:sniffer");
+        } else if (normalized.startsWith("@heltec-bridge ")) {
+            const int idStart = command.indexOf(' ') + 1;
+            const int idEnd = command.indexOf(' ', idStart);
+            const String id = idStart > 0 && idEnd > idStart ? command.substring(idStart, idEnd) : "0";
+            serialDevice->println(
+                String("@HELTEC-BRIDGE ") + id + " ERROR {\"error\":\"sniffer active; send stopscan\"}"
+            );
+        } else {
+            serialDevice->println("[SNIFFER] active; send stopscan to return to the console");
+        }
+    }
+    return false;
+}
 
 // --Deauth sent clean
 bool deauth_displayed = false;
@@ -1153,6 +1203,8 @@ void sniffer_setup() {
     bool deauth = false;
     unsigned long lastLittleFsCheck = 0;
     start_time = millis();
+    returnToMenu = false;
+    snifferConsoleInput = "";
     drawMainBorderWithTitle("pcap sniffer");
     lastRedraw = millis();
     // closeSdCard();
@@ -1214,6 +1266,7 @@ void sniffer_setup() {
     esp_wifi_set_channel(all_wifi_channels[ch], secondCh);
 
     Serial.println("Sniffer started!");
+    serialDevice->println("[SNIFFER] started; send stopscan to return to the console");
     vTaskDelay(1000 / portTICK_RATE_MS);
 
     if (isLittleFS && !checkLittleFsSize()) {
@@ -1232,6 +1285,10 @@ void sniffer_setup() {
     // Main sniffer loop
 
     for (;;) {
+        if (pollSnifferConsoleStop()) {
+            returnToMenu = true;
+            break;
+        }
         if (returnToMenu) {
             if (littleFsWasFull) {
                 Serial.println("Not enough space on LittleFS");
@@ -1479,6 +1536,7 @@ Exit:
     closeDeauthFile();
     wifiDisconnect();
     vTaskDelay(1 / portTICK_RATE_MS);
+    serialDevice->println("[SNIFFER] stopped");
 }
 
 void setHandshakeSniffer() {
