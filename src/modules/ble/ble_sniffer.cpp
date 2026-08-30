@@ -9,6 +9,7 @@
 
 #if defined(LITE_VERSION)
 #include "ble_sniffer.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/sd_functions.h"
@@ -298,6 +299,7 @@ void BLE_Sniffer() {
                 if (!fs->exists("/BruceSniffer")) fs->mkdir("/BruceSniffer");
 
                 String filename = "/BruceSniffer/sniffer_" + String(millis()) + ".txt";
+                AndroidStorageActiveGuard storageGuard(filename, fs == &SD);
                 File file = fs->open(filename, FILE_WRITE);
                 if (file) {
                     file.println("=== BLE SNIFFER CAPTURE ===");

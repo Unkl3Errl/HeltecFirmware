@@ -153,10 +153,16 @@ uint32_t writeCallback(cmd *c) {
     if (!getFsStorage(fs)) return false;
 
     char *txt = _readFileFromSerial(fileSize + 2);
-    if (strlen(txt) == 0) return false;
+    if (txt == nullptr || strlen(txt) == 0) {
+        free(txt);
+        return false;
+    }
 
     File f = fs->open(filepath, FILE_WRITE, true);
-    if (!f) return false;
+    if (!f) {
+        free(txt);
+        return false;
+    }
 
     f.write((const uint8_t *)txt, strlen(txt));
     f.close();
@@ -742,18 +748,55 @@ uint32_t copyCallback(cmd *c) {
         return false;
     }
 
-    bool r;
-    fileToCopy = filepath;
-    if (pasteFile((*fs), newName)) {
-        serialDevice->println("File copied to '" + newName + "'");
-        r = true;
-    } else {
-        serialDevice->println("Error copying file");
-        r = false;
+    if (filepath == newName) {
+        serialDevice->println("Source and destination must differ");
+        return false;
     }
 
-    fileToCopy = "";
-    return r;
+    File source = fs->open(filepath, FILE_READ);
+    if (!source || source.isDirectory()) {
+        if (source) source.close();
+        serialDevice->println("Source is not a regular file");
+        return false;
+    }
+
+    File destination = fs->open(newName, FILE_WRITE, true);
+    if (!destination) {
+        source.close();
+        serialDevice->println("Error opening destination file");
+        return false;
+    }
+
+    constexpr size_t bufferSize = 1024;
+    uint8_t *buffer = static_cast<uint8_t *>(malloc(bufferSize));
+    if (!buffer) {
+        source.close();
+        destination.close();
+        serialDevice->println("Error allocating copy buffer");
+        return false;
+    }
+
+    bool copied = true;
+    while (source.available()) {
+        const size_t received = source.read(buffer, bufferSize);
+        if (received == 0 || destination.write(buffer, received) != received) {
+            copied = false;
+            break;
+        }
+        delay(0);
+    }
+    free(buffer);
+    source.close();
+    destination.close();
+
+    if (!copied) {
+        fs->remove(newName);
+        serialDevice->println("Error copying file");
+        return false;
+    }
+
+    serialDevice->println("File copied to '" + newName + "'");
+    return true;
 }
 
 uint32_t mkdirCallback(cmd *c) {
@@ -850,13 +893,32 @@ uint32_t freeStorageCallback(cmd *c) {
 
     if (arg.getValue() == "sd") {
         if (setupSdCard()) {
-            uint64_t totalBytes = SD.totalBytes();
-            uint64_t usedBytes = SD.usedBytes();
-            uint64_t freeBytes = totalBytes - usedBytes;
+#ifdef HELTEC_ANDROID_STORAGE
+            // FFat capacity values are size_t on ESP32. Passing them through the
+            // variadic Print::printf 64-bit path corrupts the value on this target,
+            // so use the native Print overloads instead.
+            const size_t totalBytes = SD.totalBytes();
+            const size_t usedBytes = SD.usedBytes();
+            const size_t freeBytes = totalBytes >= usedBytes ? totalBytes - usedBytes : 0;
 
-            serialDevice->printf("SD Total space: %llu Bytes\n", totalBytes);
-            serialDevice->printf("SD Used space: %llu Bytes\n", usedBytes);
-            serialDevice->printf("SD Free space: %llu Bytes\n", freeBytes);
+            serialDevice->print("SD Total space: ");
+            serialDevice->print(static_cast<unsigned long>(totalBytes));
+            serialDevice->println(" Bytes");
+            serialDevice->print("SD Used space: ");
+            serialDevice->print(static_cast<unsigned long>(usedBytes));
+            serialDevice->println(" Bytes");
+            serialDevice->print("SD Free space: ");
+            serialDevice->print(static_cast<unsigned long>(freeBytes));
+            serialDevice->println(" Bytes");
+#else
+            const uint64_t totalBytes = static_cast<uint64_t>(SD.totalBytes());
+            const uint64_t usedBytes = static_cast<uint64_t>(SD.usedBytes());
+            const uint64_t freeBytes = totalBytes >= usedBytes ? totalBytes - usedBytes : 0;
+
+            serialDevice->printf("SD Total space: %llu Bytes\n", static_cast<unsigned long long>(totalBytes));
+            serialDevice->printf("SD Used space: %llu Bytes\n", static_cast<unsigned long long>(usedBytes));
+            serialDevice->printf("SD Free space: %llu Bytes\n", static_cast<unsigned long long>(freeBytes));
+#endif
         } else {
             serialDevice->println("No SD card installed");
         }
@@ -866,9 +928,15 @@ uint32_t freeStorageCallback(cmd *c) {
         uint64_t usedBytes = LittleFS.usedBytes();
         uint64_t freeBytes = totalBytes - usedBytes;
 
-        serialDevice->printf("LittleFS Total space: %llu Bytes\n", totalBytes);
-        serialDevice->printf("LittleFS Used space: %llu Bytes\n", usedBytes);
-        serialDevice->printf("LittleFS Free space: %llu Bytes\n", freeBytes);
+        serialDevice->printf(
+            "LittleFS Total space: %llu Bytes\n", static_cast<unsigned long long>(totalBytes)
+        );
+        serialDevice->printf(
+            "LittleFS Used space: %llu Bytes\n", static_cast<unsigned long long>(usedBytes)
+        );
+        serialDevice->printf(
+            "LittleFS Free space: %llu Bytes\n", static_cast<unsigned long long>(freeBytes)
+        );
     } else {
         serialDevice->printf("Invalid arg %s\n", arg.getValue().c_str());
         return false;

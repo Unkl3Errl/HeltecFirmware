@@ -52,6 +52,19 @@ class PhoneWifiFieldLogContractTest(unittest.TestCase):
         self.assertIn("writeBridgeResponse", SERIAL_SOURCE)
         self.assertIn('writeBridgeError(id, "unsupported bridge action")', SERIAL_SOURCE)
 
+    def test_radio_workers_start_atomically_with_ble_stack_reserved_first(self):
+        self.assertIn("constexpr uint32_t kBleTaskStackBytes = 6144;", FIELD_SOURCE)
+        start_services = FIELD_SOURCE[
+            FIELD_SOURCE.index("bool startSelectedServices") :
+            FIELD_SOURCE.index("void stopSelectedServices")
+        ]
+        self.assertLess(
+            start_services.index('"HeltecFieldBLE"'),
+            start_services.index("heltecV4SetGpsMonitor(true)"),
+        )
+        self.assertIn("if (startServices && !startSelectedServices", FIELD_SOURCE)
+        self.assertIn('document["reason"] = "source_start_failed";', FIELD_SOURCE)
+
 
 if __name__ == "__main__":
     unittest.main()

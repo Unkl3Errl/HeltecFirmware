@@ -158,10 +158,18 @@ String readDecryptedFile(FS &fs, String filepath) {
 String encryptString(String &plaintext, const String &password_str) {
     String dataStr = xorEncryptDecryptMD5(plaintext, password_str, 10);
     String dataStrHex = "";
+    static const char hexDigits[] = "0123456789ABCDEF";
+    dataStrHex.reserve(dataStr.length() * 3);
 
-    for (size_t i = 0; i < dataStr.length(); i++) dataStrHex += String(dataStr[i], HEX) + " ";
-    dataStrHex.toUpperCase();
-    dataStrHex.trim();
+    // Arduino String(char, HEX) sign-extends bytes >= 0x80 on ESP32, producing
+    // values such as FFFFFF8A. The reader consumes one two-digit byte per token,
+    // so those variable-width tokens made newly encrypted files undecryptable.
+    for (size_t i = 0; i < dataStr.length(); i++) {
+        const uint8_t value = static_cast<uint8_t>(dataStr[i]);
+        if (i > 0) dataStrHex += ' ';
+        dataStrHex += hexDigits[value >> 4];
+        dataStrHex += hexDigits[value & 0x0F];
+    }
 
     String out = "Filetype: Bruce Encrypted File\nVersion: 1\n";
     out += "Algo: XOR\n"; // TODO: add AES

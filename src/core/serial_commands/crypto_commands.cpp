@@ -53,20 +53,33 @@ uint32_t encryptFileCallback(cmd *c) {
     cachedPassword = password;
 
     char *txt = _readFileFromSerial();
-    if (strlen(txt) == 0) return false;
+    if (txt == nullptr || strlen(txt) == 0) {
+        free(txt);
+        return false;
+    }
     String txtString = String(txt);
 
     FS *fs;
-    if (!getFsStorage(fs)) return false;
+    if (!getFsStorage(fs)) {
+        free(txt);
+        return false;
+    }
 
     File f = fs->open(filepath, FILE_WRITE);
-    if (!f) return false;
+    if (!f) {
+        free(txt);
+        return false;
+    }
 
     String cyphertxt = encryptString(txtString, cachedPassword);
-    if (cyphertxt == "") return false;
+    if (cyphertxt == "") {
+        free(txt);
+        return false;
+    }
 
     f.write((const uint8_t *)cyphertxt.c_str(), cyphertxt.length());
     f.close();
+    free(txt);
     serialDevice->println("File written: " + filepath);
     return true;
 }
