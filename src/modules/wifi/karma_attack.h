@@ -180,13 +180,13 @@ typedef struct {
     uint8_t priorityThreshold;
     uint8_t cloneThreshold;
     bool enableBeaconing;
-    uint16_t highTierDuration;
-    uint16_t mediumTierDuration;
-    uint16_t fastTierDuration;
+    uint32_t highTierDuration;
+    uint32_t mediumTierDuration;
+    uint32_t fastTierDuration;
     uint32_t cloneDuration;
     uint8_t maxCloneNetworks;
-    uint16_t baseDuration;
-    uint16_t extendedDuration;
+    uint32_t baseDuration;
+    uint32_t extendedDuration;
 } AttackConfig;
 
 // Handshake capture structure

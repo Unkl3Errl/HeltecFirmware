@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include <NimBLEDevice.h>
 #include <Preferences.h>
+#include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <mbedtls/base64.h>
 
@@ -32,6 +33,11 @@ constexpr uint32_t kWifiObservationIntervalMs = 60 * 1000;
 constexpr uint32_t kBleScanDurationMs = 5000;
 constexpr uint32_t kBleScanPauseMs = 10000;
 constexpr uint32_t kGpsAssociationMaximumAgeMs = 30000;
+// The WebUI leaves enough internal RAM for both logger workers, but starting the
+// 4 KiB GPS task first can fragment the largest block below the old 8 KiB BLE
+// request. The scan loop has bounded locals and uses NimBLE-owned result storage,
+// so 6 KiB leaves headroom while allowing both workers to coexist with BruceNet.
+constexpr uint32_t kBleTaskStackBytes = 6144;
 
 struct RecentBleDevice {
     uint32_t hash = 0;
@@ -677,27 +683,54 @@ void bleLoggerTask(void *) {
     vTaskDelete(nullptr);
 }
 
-void startSelectedServices(bool startGps, bool startBle) {
-    if (startGps) {
-        const bool alreadyActive = heltecV4GpsMonitorActive();
-        const bool ok = heltecV4SetGpsMonitor(true);
-        LoggerLock lock;
-        if (lock) {
-            gpsOwned = ok && !alreadyActive;
-            if (!ok) lastError = "GPS monitor could not start";
-        }
-    }
+bool startSelectedServices(bool startGps, bool startBle) {
+    bool started = true;
+    // Reserve the larger worker stack first while internal RAM is least
+    // fragmented. NimBLE itself is configured to put eligible allocations in
+    // PSRAM, but FreeRTOS task stacks remain internal on this framework build.
     if (startBle) {
         LoggerLock lock;
-        if (!lock) return;
+        if (!lock) return false;
         if (!bleTaskHandle) {
             bleStopRequested = false;
-            if (xTaskCreate(bleLoggerTask, "HeltecFieldBLE", 8192, nullptr, 1, &bleTaskHandle) != pdPASS) {
+            if (
+                xTaskCreate(
+                    bleLoggerTask,
+                    "HeltecFieldBLE",
+                    kBleTaskStackBytes,
+                    nullptr,
+                    1,
+                    &bleTaskHandle
+                ) != pdPASS
+            ) {
                 bleTaskHandle = nullptr;
                 lastError = "BLE logger task could not start";
+                started = false;
+                Serial.printf(
+                    "[HELTEC] BLE logger allocation failed: internal=%u largest=%u stack=%u\n",
+                    static_cast<unsigned>(
+                        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+                    ),
+                    static_cast<unsigned>(
+                        heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+                    ),
+                    static_cast<unsigned>(kBleTaskStackBytes)
+                );
             }
         }
     }
+    if (startGps && started) {
+        const bool alreadyActive = heltecV4GpsMonitorActive();
+        const bool ok = heltecV4SetGpsMonitor(true);
+        LoggerLock lock;
+        if (!lock) return false;
+        gpsOwned = ok && !alreadyActive;
+        if (!ok) {
+            lastError = "GPS monitor could not start";
+            started = false;
+        }
+    }
+    return started;
 }
 
 void stopSelectedServices(bool stopGps) {
@@ -781,7 +814,21 @@ void heltecFieldLoggerBegin() {
         }
     }
 
-    if (resumeServices) startSelectedServices(resumeGps, resumeBle);
+    if (resumeServices && !startSelectedServices(resumeGps, resumeBle)) {
+        bool stopGps = false;
+        {
+            LoggerLock lock;
+            if (lock) {
+                active = false;
+                autoResume = false;
+                stopGps = gpsOwned;
+                gpsOwned = false;
+                persistSessionLocked();
+            }
+        }
+        stopSelectedServices(stopGps);
+        resumeServices = false;
+    }
     Serial.printf(
         "[HELTEC] Field logger: %s, session=%lu, reset=%s\n",
         resumeServices ? "resumed" : "idle",
@@ -863,7 +910,25 @@ bool heltecFieldLoggerStart(
         startServices = true;
     }
 
-    if (startServices) startSelectedServices(enableGps, enableBle);
+    if (startServices && !startSelectedServices(enableGps, enableBle)) {
+        bool stopGps = false;
+        {
+            LoggerLock lock;
+            if (lock) {
+                active = false;
+                autoResume = false;
+                JsonDocument document;
+                addCommonFieldsLocked(document, "session_stop");
+                document["reason"] = "source_start_failed";
+                appendRecordLocked(document);
+                stopGps = gpsOwned;
+                gpsOwned = false;
+                persistSessionLocked();
+            }
+        }
+        stopSelectedServices(stopGps);
+        return false;
+    }
     return true;
 }
 

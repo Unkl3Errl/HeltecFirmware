@@ -1,5 +1,6 @@
 #include "mic.h"
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
+#include "core/android_storage.h"
 #include "core/mykeyboard.h"
 #include "core/powerSave.h"
 #include "core/settings.h"
@@ -439,6 +440,7 @@ bool mic_record_wav_to_path(
             if (!fs->exists(dir)) fs->mkdir(dir);
         }
 
+        AndroidStorageActiveGuard storageGuard(fixedPath, fs == &SD);
         File audioFile = fs->open(fixedPath, FILE_WRITE, true);
         if (!audioFile) break;
 

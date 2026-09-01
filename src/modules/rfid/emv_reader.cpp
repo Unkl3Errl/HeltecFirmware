@@ -1,6 +1,7 @@
 #ifndef LITE_VERSION
 #include "emv_reader.hpp"
 #include "BerTlv.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include <globals.h>
 
@@ -462,7 +463,9 @@ void EMVReader::save_emv(const char *aid, const char *pan, const char *validfrom
     filename += pan_dashed;
     filename += ".txt";
 
-    File file = (*fs).open("/BruceRFID/Scans/" + filename, FILE_WRITE);
+    const String outputPath = "/BruceRFID/Scans/" + filename;
+    AndroidStorageActiveGuard storageGuard(outputPath, fs == &SD);
+    File file = (*fs).open(outputPath, FILE_WRITE);
 
     if (!file) {
         displayError("Error opening file.");

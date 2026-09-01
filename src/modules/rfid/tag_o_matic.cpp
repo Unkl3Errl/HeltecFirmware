@@ -7,6 +7,7 @@
  */
 
 #include "tag_o_matic.h"
+#include "core/android_storage.h"
 #include "core/bus_HAL.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
@@ -678,7 +679,9 @@ void TagOMatic::save_scan_result() {
         while ((*fs).exists("/BruceRFID/Scans/" + filename + String(i) + ".rfidscan")) i++;
         filename += String(i);
     }
-    File file = (*fs).open("/BruceRFID/Scans/" + filename + ".rfidscan", FILE_WRITE);
+    const String outputPath = "/BruceRFID/Scans/" + filename + ".rfidscan";
+    AndroidStorageActiveGuard storageGuard(outputPath, fs == &SD);
+    File file = (*fs).open(outputPath, FILE_WRITE);
 
     if (!file) { return; }
 

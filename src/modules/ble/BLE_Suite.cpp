@@ -14,6 +14,7 @@
 #include "BLE_Suite.h"
 #include "HFP_Exploit.h"
 #include "ble_common.h"
+#include "core/android_storage.h"
 #include "core/display.h"
 #include "core/mykeyboard.h"
 #include "core/radio_mem.h"
@@ -4095,6 +4096,7 @@ void BLE_Sniffer() {
                 if (!fs->exists("/BruceSniffer")) fs->mkdir("/BruceSniffer");
 
                 String filename = "/BruceSniffer/sniffer_" + String(millis()) + ".txt";
+                AndroidStorageActiveGuard storageGuard(filename, fs == &SD);
                 File file = fs->open(filename, FILE_WRITE);
                 if (file) {
                     file.println("=== BLE SNIFFER CAPTURE ===");
