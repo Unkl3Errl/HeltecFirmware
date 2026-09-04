@@ -295,6 +295,19 @@ void writeStorage(const String &operation, const String &requested, const String
         return;
     }
 
+    size_t originalSize = 0;
+    if (operation == "append" && SD.exists(path)) {
+        File existing = SD.open(path, FILE_READ);
+        if (!existing || existing.isDirectory()) {
+            if (existing) existing.close();
+            free(decoded);
+            storageError("cannot_open:" + path);
+            return;
+        }
+        originalSize = existing.size();
+        existing.close();
+    }
+
     const char *mode = operation == "append" ? FILE_APPEND : FILE_WRITE;
     File file = SD.open(path, mode, true);
     if (!file) {
@@ -303,6 +316,7 @@ void writeStorage(const String &operation, const String &requested, const String
         return;
     }
     const size_t written = file.write(decoded, decodedLength);
+    file.flush();
     file.close();
     free(decoded);
     serialDevice->println(
@@ -310,11 +324,19 @@ void writeStorage(const String &operation, const String &requested, const String
     );
     if (written != decodedLength) {
         storageError("short_write:" + path);
-    } else {
-        serialDevice->println(
-            String(operation == "append" ? "SD:OK:appended:" : "SD:OK:created:") + path
-        );
+        return;
     }
+
+    size_t durableSize = 0;
+    uint32_t durableCrc32 = 0;
+    const size_t expectedSize = operation == "append" ? originalSize + decodedLength : decodedLength;
+    if (!storageCrc32(path, durableSize, durableCrc32) || durableSize != expectedSize) {
+        storageError("durability_check_failed:" + path);
+        return;
+    }
+    serialDevice->println(
+        String(operation == "append" ? "SD:OK:appended:" : "SD:OK:created:") + path
+    );
 }
 } // namespace
 
