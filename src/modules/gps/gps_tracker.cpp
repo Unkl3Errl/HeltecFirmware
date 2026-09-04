@@ -199,39 +199,44 @@ void GPSTracker::add_initial_file_data(File file) {
 }
 
 void GPSTracker::add_final_file_data() {
-    const String path = filename == "" ? "" : "/BruceGPS/" + filename;
+    const String finalPath = filename == "" ? "" : "/BruceGPS/" + filename;
+    const String partPath = finalPath + ".part";
     FS *fs;
     if (!getFsStorage(fs)) {
         if (androidStorageTracked) {
-            androidStorageMarkClosed(path);
+            androidStorageMarkClosed(partPath);
             androidStorageTracked = false;
         }
         return;
     }
-    if (filename == "" || !(*fs).exists(path)) {
+    if (filename == "" || !(*fs).exists(partPath)) {
         if (androidStorageTracked) {
-            androidStorageMarkClosed(path);
+            androidStorageMarkClosed(partPath);
             androidStorageTracked = false;
         }
         return;
     }
 
-    File file = (*fs).open(path, FILE_APPEND);
+    File file = (*fs).open(partPath, FILE_APPEND);
 
     if (!file) {
         if (androidStorageTracked) {
-            androidStorageMarkClosed(path);
+            androidStorageMarkClosed(partPath);
             androidStorageTracked = false;
         }
         return;
     }
-    file.println("    </trkseg>");
-    file.println("  </trk>");
-    file.println("</gpx>");
-
+    static const char gpxFooter[] = "    </trkseg>\n  </trk>\n</gpx>\n";
+    const bool footerWritten = file.print(gpxFooter) == sizeof(gpxFooter) - 1;
+    file.flush();
     file.close();
+    if (!footerWritten) {
+        padprintln("Failed to close GPS file; retaining temporary file");
+    } else if (!(*fs).rename(partPath, finalPath)) {
+        padprintln("Failed to finalize GPS file");
+    }
     if (androidStorageTracked) {
-        androidStorageMarkClosed(path);
+        androidStorageMarkClosed(partPath);
         androidStorageTracked = false;
     }
 }
@@ -246,7 +251,7 @@ void GPSTracker::add_coord() {
 
     if (filename == "") create_filename();
 
-    const String path = "/BruceGPS/" + filename;
+    const String path = "/BruceGPS/" + filename + ".part";
     if (fs == &SD && !androidStorageTracked) {
         androidStorageMarkActive(path);
         androidStorageTracked = true;

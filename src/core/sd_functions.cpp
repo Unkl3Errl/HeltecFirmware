@@ -26,6 +26,38 @@
 String fileToCopy;
 std::vector<FileList> fileList;
 
+#ifdef HELTEC_ANDROID_STORAGE
+namespace {
+bool virtualSpoolHasPayload(const String &path, uint8_t depth = 0) {
+    File node = SD.open(path);
+    if (!node) return true; // An unreadable entry is never safe to erase.
+    if (!node.isDirectory()) {
+        const bool payload = node.size() > 0;
+        node.close();
+        return payload;
+    }
+    if (depth >= 8) {
+        node.close();
+        return true;
+    }
+    File entry = node.openNextFile();
+    while (entry) {
+        const String childPath = entry.path();
+        const bool directory = entry.isDirectory();
+        const bool payload = directory ? false : entry.size() > 0;
+        entry.close();
+        if (payload || (directory && virtualSpoolHasPayload(childPath, depth + 1))) {
+            node.close();
+            return true;
+        }
+        entry = node.openNextFile();
+    }
+    node.close();
+    return false;
+}
+} // namespace
+#endif
+
 /***************************************************************************************
 ** Function name: setupLittleFS
 ** Description:   Start LittleFS
@@ -60,6 +92,21 @@ bool setupSdCard(uint8_t maxFiles) {
         Serial.println("Android virtual SD could not be mounted");
         sdcardMounted = false;
         return false;
+    }
+    /* A cross-firmware FAT volume can mount yet expose no free clusters and
+       no recoverable payload. Repair only that empty state; a genuinely full
+       spool must be preserved for the phone to archive. */
+    if (SD.freeBytes() == 0 && !virtualSpoolHasPayload("/")) {
+        Serial.println("Repairing unusable Android virtual SD");
+        SD.end();
+        char partitionLabel[] = "android";
+        if (!SD.format(false, partitionLabel) || !SD.begin(false, "/android", 10, "android") ||
+            SD.freeBytes() == 0) {
+            Serial.println("Failed to repair Android virtual SD");
+            SD.end();
+            sdcardMounted = false;
+            return false;
+        }
     }
     Serial.println("Android virtual SD mounted from internal flash");
     sdcardMounted = true;
